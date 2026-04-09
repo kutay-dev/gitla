@@ -1,0 +1,24 @@
+{
+  "name": "gitla",
+  "version": "1.0.0",
+  "description": "Git workflow automation CLI - branch, commit, push, cherry-pick in one command",
+  "main": "dist/index.js",
+  "bin": {
+    "gitla": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "commander": "^12.1.0",
+    "execa": "^5.1.1",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0"
+  }
+}
