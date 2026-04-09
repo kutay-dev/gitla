@@ -1,28 +1,31 @@
 import { Config } from './config';
 
 export interface AiResult {
-  type: 'feature' | 'bugfix';
+  type: string;
   commitMessage: string;
 }
 
 const MAX_DIFF_LENGTH = 8000;
 
-const PROMPT = `You are a git commit assistant. Analyze this git diff and respond with valid JSON only (no markdown, no code fences).
+function buildPrompt(flags: string[]): string {
+  const flagList = flags.map((f) => `"${f}"`).join(', ');
+  const flagDescriptions = flags.join(' / ');
+  return `You are a git commit assistant. Analyze this git diff and respond with valid JSON only (no markdown, no code fences).
 
 The JSON must have exactly these fields:
-- "type": either "feature" (new functionality, enhancements) or "bugfix" (fixing broken behavior, errors, issues)
+- "type": one of ${flagList} — pick the most appropriate based on the nature of the changes (${flagDescriptions})
 - "commitMessage": a concise commit message, max 72 characters, imperative mood (e.g. "add user login endpoint", "fix null pointer in auth middleware")
 
 Diff:
 `;
+}
 
 function truncateDiff(diff: string): string {
   if (diff.length <= MAX_DIFF_LENGTH) return diff;
   return diff.slice(0, MAX_DIFF_LENGTH) + '\n... (truncated)';
 }
 
-function parseResponse(text: string): AiResult {
-  // Strip markdown code fences if the model adds them
+function parseResponse(text: string, flags: string[]): AiResult {
   const cleaned = text
     .replace(/```json?\n?/g, '')
     .replace(/```\n?/g, '')
@@ -33,8 +36,8 @@ function parseResponse(text: string): AiResult {
     throw new Error('AI response missing required fields');
   }
 
-  if (parsed.type !== 'feature' && parsed.type !== 'bugfix') {
-    parsed.type = 'feature'; // default
+  if (!flags.includes(parsed.type)) {
+    parsed.type = flags[0];
   }
 
   return {
@@ -54,7 +57,7 @@ async function callAnthropic(diff: string, config: Config): Promise<string> {
     messages: [
       {
         role: 'user',
-        content: PROMPT + truncateDiff(diff),
+        content: buildPrompt(config.flags) + truncateDiff(diff),
       },
     ],
   });
@@ -72,11 +75,11 @@ async function callOpenAI(diff: string, config: Config): Promise<string> {
   const model = config.model || 'gpt-5.4-nano';
   const response = await client.chat.completions.create({
     model,
-    max_tokens: 200,
+    max_completion_tokens: 200,
     messages: [
       {
         role: 'user',
-        content: PROMPT + truncateDiff(diff),
+        content: buildPrompt(config.flags) + truncateDiff(diff),
       },
     ],
   });
@@ -92,5 +95,5 @@ export async function analyzeChanges(
 ): Promise<AiResult> {
   const callAI = config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
   const text = await callAI(diff, config);
-  return parseResponse(text);
+  return parseResponse(text, config.flags);
 }

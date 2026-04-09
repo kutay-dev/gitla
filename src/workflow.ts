@@ -6,7 +6,7 @@ import * as git from './git';
 export interface WorkflowOptions {
   dryRun?: boolean;
   message?: string;
-  type?: 'feature' | 'bugfix';
+  type?: string;
   yes?: boolean;
 }
 
