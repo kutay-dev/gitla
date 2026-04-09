@@ -4,6 +4,7 @@ import * as readline from 'readline';
 import { AiResult, analyzeChanges } from './ai';
 import { Config } from './config';
 import * as git from './git';
+import { notify } from './notify';
 import { Spinner } from './spinner';
 import { theme } from './theme';
 
@@ -206,23 +207,35 @@ export async function runWorkflow(
     await withSpinner(`Creating branch ${devBranchName}`, () =>
       git.createAndCheckoutBranch(devBranchName),
     );
-    await withSpinner('Cherry-picking commit', () => git.cherryPick(commitSha));
+
+    try {
+      await withSpinner('Cherry-picking commit', () => git.cherryPick(commitSha));
+    } catch (cherryErr: any) {
+      const conflictFiles = await git.getConflictedFiles();
+      console.log(`\n${theme.warning('⚠ Cherry-pick conflict detected')}`);
+      console.log(theme.muted('Conflicted files:'));
+      conflictFiles.forEach((f) => console.log(`  ${theme.error(f)}`));
+      console.log(`\nFix the conflicts in your editor, then stage the files with ${theme.muted('git add .')}`);
+
+      const resolved = await confirm('\nConflicts resolved? [Y/n] ');
+      if (!resolved) {
+        console.error(theme.error('\nAborted. Run manually:'));
+        console.error(`  git cherry-pick --continue`);
+        console.error(`  git push origin ${devBranchName}`);
+        console.error(`  git checkout staging`);
+        throw cherryErr;
+      }
+
+      await withSpinner('Continuing cherry-pick', () => git.cherryPickContinue());
+    }
+
     await withSpinner(`Pushing ${devBranchName}`, () =>
       git.push(devBranchName),
     );
   } catch (err: any) {
-    console.error(
-      `\n${theme.error(
-        `Failed during develop branch workflow: ${err.message}`,
-      )}`,
-    );
-    console.error(
-      `\nThe staging branch "${branchName}" was pushed successfully.`,
-    );
-    console.error('You may need to resolve conflicts manually:');
-    console.error(`  git cherry-pick --continue`);
-    console.error(`  git push origin ${devBranchName}`);
-    console.error(`  git checkout staging`);
+    if (!err.message?.includes('cherry-pick')) {
+      console.error(`\n${theme.error(`Failed during develop branch workflow: ${err.message}`)}`);
+    }
     throw err;
   }
 
@@ -234,6 +247,8 @@ export async function runWorkflow(
       '\nWarning: Could not return to staging branch. Run: git checkout staging',
     );
   }
+
+  await notify('gitla', `${branchName} done`);
 
   console.log(`\n${theme.primary('✓ Done!')}`);
   console.log(`  ${theme.primary(branchName)} → pushed`);

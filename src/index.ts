@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { loadConfig } from './config';
+import { notify } from './notify';
 import { theme } from './theme';
 import { runWorkflow } from './workflow';
 
@@ -74,6 +75,7 @@ program
         skipBuild: opts.skipBuild,
       });
     } catch (err: any) {
+      await notify('gitla', 'Failed — check your terminal');
       console.error(`\n${theme.error(`Error: ${err.message}`)}`);
       process.exit(1);
     }

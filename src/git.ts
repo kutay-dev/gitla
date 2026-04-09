@@ -72,3 +72,12 @@ export async function pull(branch: string): Promise<void> {
 export async function cherryPick(sha: string): Promise<void> {
   await run('git', ['cherry-pick', sha]);
 }
+
+export async function getConflictedFiles(): Promise<string[]> {
+  const result = await execa('git', ['diff', '--name-only', '--diff-filter=U']);
+  return result.stdout.trim().split('\n').filter(Boolean);
+}
+
+export async function cherryPickContinue(): Promise<void> {
+  await run('git', ['cherry-pick', '--continue', '--no-edit']);
+}
