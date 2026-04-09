@@ -76,6 +76,7 @@ export async function runWorkflow(
 
   const branchName = `${result.type}/${config.board}-${taskNumber}`;
   const devBranchName = `${branchName}-dev`;
+  result.commitMessage = `${branchName} ${result.commitMessage}`;
 
   // Step 4: Show and confirm
   console.log(
@@ -86,15 +87,23 @@ export async function runWorkflow(
     `  ${theme.muted('Branch:')}         ${theme.primary(branchName)}`,
   );
   console.log(
-    `  ${theme.muted('Dev branch:')}     ${theme.primary(devBranchName)}\n`,
+    `  ${theme.muted('Dev branch:')}     ${theme.primary(devBranchName)}`,
   );
+  if (result.tokensUsed) {
+    const secs = (result.tokensUsed.elapsedMs / 1000).toFixed(1);
+    console.log(
+      `  ${theme.muted('Tokens used:')}    ${result.tokensUsed.input} in / ${result.tokensUsed.output} out in ${secs}s`,
+    );
+  }
+  console.log('');
 
   if (options.dryRun) {
     console.log('Dry run — no changes made.');
     return;
   }
 
-  if (!options.yes) {
+  const manualMode = !!(options.type && options.message);
+  if (!options.yes && !manualMode) {
     const ok = await confirm('Proceed? [Y/n] ');
     if (!ok) {
       console.log('Aborted.');

@@ -26,36 +26,49 @@ program
   .description('Automate git branch/commit/push/cherry-pick workflow')
   .argument('[taskNumber]', 'Jira task number (e.g. 123)')
   .option('--dry-run', 'Show what would happen without making changes')
-  .option('-m, --message <msg>', 'Skip AI and use this commit message')
-  .option(
-    '-t, --type <type>',
-    'Skip AI classification, use this branch type (must match a flag in ~/.gitlarc.json)',
-  )
+  .option('-m, --message <msg>', 'Commit message (skips AI message generation)')
+  .option('-b, --branch <flag/taskNumber>', 'Branch type and task number (e.g. feat/123), skips AI entirely when combined with -m')
   .option('-y, --yes', 'Skip confirmation prompt')
-  .action(async (taskNumber: string | undefined, opts: any) => {
+  .action(async (argTaskNumber: string | undefined, opts: any) => {
     try {
       const config = await loadConfig();
+
+      let taskNumber = argTaskNumber;
+      let type: string | undefined;
+
+      if (opts.branch) {
+        const slash = opts.branch.indexOf('/');
+        if (slash === -1) {
+          console.error(theme.error('Error: -b format must be <type>/<taskNumber> (e.g. feat/123)'));
+          process.exit(1);
+        }
+        type = opts.branch.slice(0, slash);
+        taskNumber = opts.branch.slice(slash + 1);
+
+        if (!type || !taskNumber) {
+          console.error(theme.error('Error: -b format must be <type>/<taskNumber> (e.g. feat/123)'));
+          process.exit(1);
+        }
+
+        if (!config.flags.includes(type)) {
+          console.error(theme.error(`Error: branch type "${type}" must be one of: ${config.flags.join(', ')}`));
+          process.exit(1);
+        }
+      }
 
       if (!taskNumber) {
         taskNumber = await askTaskNumber();
       }
 
       if (!taskNumber) {
-        console.error('Error: task number is required');
-        process.exit(1);
-      }
-
-      if (opts.type && !config.flags.includes(opts.type)) {
-        console.error(
-          `Error: --type must be one of: ${config.flags.join(', ')}`,
-        );
+        console.error(theme.error('Error: task number is required'));
         process.exit(1);
       }
 
       await runWorkflow(taskNumber, config, {
         dryRun: opts.dryRun,
         message: opts.message,
-        type: opts.type,
+        type,
         yes: opts.yes,
       });
     } catch (err: any) {

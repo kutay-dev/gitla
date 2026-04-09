@@ -4,6 +4,7 @@ import { Spinner } from './spinner';
 export interface AiResult {
   type: string;
   commitMessage: string;
+  tokensUsed?: { input: number; output: number; elapsedMs: number };
 }
 
 const MAX_DIFF_LENGTH = 8000;
@@ -26,7 +27,7 @@ function truncateDiff(diff: string): string {
   return diff.slice(0, MAX_DIFF_LENGTH) + '\n... (truncated)';
 }
 
-function parseResponse(text: string, flags: string[]): AiResult {
+function parseResponse(text: string, flags: string[]): Omit<AiResult, 'tokensUsed'> {
   const cleaned = text
     .replace(/```json?\n?/g, '')
     .replace(/```\n?/g, '')
@@ -47,7 +48,7 @@ function parseResponse(text: string, flags: string[]): AiResult {
   };
 }
 
-async function callAnthropic(diff: string, config: Config): Promise<string> {
+async function callAnthropic(diff: string, config: Config): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
   const client = new Anthropic({ apiKey: config.apiKey });
 
@@ -55,21 +56,19 @@ async function callAnthropic(diff: string, config: Config): Promise<string> {
   const response = await client.messages.create({
     model,
     max_tokens: 200,
-    messages: [
-      {
-        role: 'user',
-        content: buildPrompt(config.flags) + truncateDiff(diff),
-      },
-    ],
+    messages: [{ role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) }],
   });
 
   const block = response.content[0];
-  if (block.type !== 'text')
-    throw new Error('Unexpected response type from Anthropic');
-  return block.text;
+  if (block.type !== 'text') throw new Error('Unexpected response type from Anthropic');
+
+  return {
+    text: block.text,
+    tokensUsed: { input: response.usage.input_tokens, output: response.usage.output_tokens },
+  };
 }
 
-async function callOpenAI(diff: string, config: Config): Promise<string> {
+async function callOpenAI(diff: string, config: Config): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const OpenAI = (await import('openai')).default;
   const client = new OpenAI({ apiKey: config.apiKey });
 
@@ -77,32 +76,32 @@ async function callOpenAI(diff: string, config: Config): Promise<string> {
   const response = await client.chat.completions.create({
     model,
     max_completion_tokens: 200,
-    messages: [
-      {
-        role: 'user',
-        content: buildPrompt(config.flags) + truncateDiff(diff),
-      },
-    ],
+    messages: [{ role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) }],
   });
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('Empty response from OpenAI');
-  return content;
+
+  return {
+    text: content,
+    tokensUsed: {
+      input: response.usage?.prompt_tokens ?? 0,
+      output: response.usage?.completion_tokens ?? 0,
+    },
+  };
 }
 
-export async function analyzeChanges(
-  diff: string,
-  config: Config,
-): Promise<AiResult> {
+export async function analyzeChanges(diff: string, config: Config): Promise<AiResult> {
   const spinner = new Spinner();
   spinner.start('Thinking...');
+  const start = Date.now();
   try {
-    const callAI =
-      config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
-    const text = await callAI(diff, config);
+    const callAI = config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
+    const { text, tokensUsed } = await callAI(diff, config);
+    const elapsedMs = Date.now() - start;
     const result = parseResponse(text, config.flags);
     spinner.stop();
-    return result;
+    return { ...result, tokensUsed: { ...tokensUsed, elapsedMs } };
   } catch (err) {
     spinner.stop();
     throw err;
