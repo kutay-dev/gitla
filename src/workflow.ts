@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as readline from 'readline';
 import { AiResult, analyzeChanges } from './ai';
 import { Config } from './config';
@@ -10,6 +12,7 @@ export interface WorkflowOptions {
   message?: string;
   type?: string;
   yes?: boolean;
+  skipBuild?: boolean;
 }
 
 function confirm(question: string): Promise<boolean> {
@@ -27,6 +30,32 @@ function confirm(question: string): Promise<boolean> {
       );
     });
   });
+}
+
+function getPackageScripts(): Record<string, string> {
+  const pkgPath = path.join(process.cwd(), 'package.json');
+  if (!fs.existsSync(pkgPath)) return {};
+  return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).scripts ?? {};
+}
+
+async function runLint(): Promise<void> {
+  const scripts = getPackageScripts();
+  if (!scripts.lint) return;
+
+  console.log(theme.muted('\n> npm run lint\n'));
+  const execa = (await import('execa')).default;
+  await execa('npm', ['run', 'lint'], { stdio: 'inherit' });
+}
+
+async function runBuild(): Promise<void> {
+  const scripts = getPackageScripts();
+  if (!scripts.build) {
+    throw new Error('No "build" script found in package.json');
+  }
+
+  console.log(theme.muted('\n> npm run build\n'));
+  const execa = (await import('execa')).default;
+  await execa('npm', ['run', 'build'], { stdio: 'inherit' });
 }
 
 async function withSpinner<T>(
@@ -58,7 +87,26 @@ export async function runWorkflow(
     );
   }
 
-  // Step 2: Get diff
+  // Step 2: Run build if configured
+  if (!options.skipBuild) {
+    try {
+      await runLint();
+    } catch (err: any) {
+      throw new Error(`Lint failed — fix errors before committing.\n${err.message}`);
+    }
+
+    if (config.buildBeforeProceed) {
+      try {
+        await runBuild();
+      } catch (err: any) {
+        throw new Error(`Build failed — fix errors before committing.\n${err.message}`);
+      }
+    }
+
+    console.log(`\n${theme.primary('✓')} Checks passed`);
+  }
+
+  // Step 3: Get diff
   const diff = await git.getDiff();
   if (!diff.trim()) {
     throw new Error('No changes detected. Stage or modify some files first.');

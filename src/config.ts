@@ -10,6 +10,7 @@ export interface Config {
   model?: string;
   flags: string[];
   alwaysOpenPR?: boolean;
+  buildBeforeProceed?: boolean;
 }
 
 export const CONFIG_PATH = path.join(os.homedir(), '.gitlarc.json');
@@ -87,6 +88,7 @@ export async function loadConfig(): Promise<Config> {
     model: fileConfig.model,
     flags: fileConfig.flags || ['feature', 'bugfix'],
     alwaysOpenPR: fileConfig.alwaysOpenPR ?? false,
+    buildBeforeProceed: fileConfig.buildBeforeProceed ?? true,
   };
 
   validateConfig(config);

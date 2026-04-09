@@ -29,6 +29,7 @@ program
   .option('-m, --message <msg>', 'Commit message (skips AI message generation)')
   .option('-b, --branch <flag/taskNumber>', 'Branch type and task number (e.g. feat/123), skips AI entirely when combined with -m')
   .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--skip-build', 'Skip the build step even if buildBeforeProceed is enabled')
   .action(async (argTaskNumber: string | undefined, opts: any) => {
     try {
       const config = await loadConfig();
@@ -70,6 +71,7 @@ program
         message: opts.message,
         type,
         yes: opts.yes,
+        skipBuild: opts.skipBuild,
       });
     } catch (err: any) {
       console.error(`\n${theme.error(`Error: ${err.message}`)}`);
