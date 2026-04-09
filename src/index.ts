@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
-import * as readline from 'readline';
 import { Command } from 'commander';
+import * as readline from 'readline';
 import { loadConfig } from './config';
+import { theme } from './theme';
 import { runWorkflow } from './workflow';
 
 function askTaskNumber(): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
   return new Promise((resolve) => {
     rl.question('Task number: ', (answer) => {
       rl.close();
@@ -23,7 +27,10 @@ program
   .argument('[taskNumber]', 'Jira task number (e.g. 123)')
   .option('--dry-run', 'Show what would happen without making changes')
   .option('-m, --message <msg>', 'Skip AI and use this commit message')
-  .option('-t, --type <type>', 'Skip AI classification, use this branch type (must match a flag in ~/.gitlarc.json)')
+  .option(
+    '-t, --type <type>',
+    'Skip AI classification, use this branch type (must match a flag in ~/.gitlarc.json)',
+  )
   .option('-y, --yes', 'Skip confirmation prompt')
   .action(async (taskNumber: string | undefined, opts: any) => {
     try {
@@ -39,7 +46,9 @@ program
       }
 
       if (opts.type && !config.flags.includes(opts.type)) {
-        console.error(`Error: --type must be one of: ${config.flags.join(', ')}`);
+        console.error(
+          `Error: --type must be one of: ${config.flags.join(', ')}`,
+        );
         process.exit(1);
       }
 
@@ -50,7 +59,7 @@ program
         yes: opts.yes,
       });
     } catch (err: any) {
-      console.error(`\n\x1b[31mError: ${err.message}\x1b[0m`);
+      console.error(`\n${theme.error(`Error: ${err.message}`)}`);
       process.exit(1);
     }
   });

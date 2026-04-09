@@ -2,6 +2,8 @@ import * as readline from 'readline';
 import { AiResult, analyzeChanges } from './ai';
 import { Config } from './config';
 import * as git from './git';
+import { Spinner } from './spinner';
+import { theme } from './theme';
 
 export interface WorkflowOptions {
   dryRun?: boolean;
@@ -27,6 +29,22 @@ function confirm(question: string): Promise<boolean> {
   });
 }
 
+async function withSpinner<T>(
+  message: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const spinner = new Spinner();
+  spinner.start(message);
+  try {
+    const result = await fn();
+    spinner.stop(`${theme.primary('✓')} ${message}`);
+    return result;
+  } catch (err) {
+    spinner.stop(`${theme.error('✗')} ${message}`);
+    throw err;
+  }
+}
+
 export async function runWorkflow(
   taskNumber: string,
   config: Config,
@@ -41,7 +59,6 @@ export async function runWorkflow(
   }
 
   // Step 2: Get diff
-  console.log('\nAnalyzing changes...');
   const diff = await git.getDiff();
   if (!diff.trim()) {
     throw new Error('No changes detected. Stage or modify some files first.');
@@ -52,11 +69,7 @@ export async function runWorkflow(
   if (options.message && options.type) {
     result = { type: options.type, commitMessage: options.message };
   } else {
-    console.log(
-      'Asking AI to classify changes and generate commit message...\n',
-    );
     result = await analyzeChanges(diff, config);
-
     if (options.type) result.type = options.type;
     if (options.message) result.commitMessage = options.message;
   }
@@ -65,11 +78,16 @@ export async function runWorkflow(
   const devBranchName = `${branchName}-dev`;
 
   // Step 4: Show and confirm
-  console.log(`  Type:           ${result.type}`);
-  console.log(`  Commit message: ${result.commitMessage}`);
-  console.log(`  Branch:         ${branchName}`);
-  console.log(`  Dev branch:     ${devBranchName}`);
-  console.log('');
+  console.log(
+    `\n  ${theme.muted('Type:')}           ${theme.primary(result.type)}`,
+  );
+  console.log(`  ${theme.muted('Commit message:')} ${result.commitMessage}`);
+  console.log(
+    `  ${theme.muted('Branch:')}         ${theme.primary(branchName)}`,
+  );
+  console.log(
+    `  ${theme.muted('Dev branch:')}     ${theme.primary(devBranchName)}\n`,
+  );
 
   if (options.dryRun) {
     console.log('Dry run — no changes made.');
@@ -99,23 +117,20 @@ export async function runWorkflow(
   let commitSha = '';
 
   try {
-    // Step 5: Create branch from staging
-    console.log('\n--- Staging branch workflow ---');
-    await git.createAndCheckoutBranch(branchName);
-
-    // Step 6: Add all
-    await git.addAll();
-
-    // Step 7: Commit
-    commitSha = await git.commit(result.commitMessage);
-    console.log(`Commit: ${commitSha}`);
-
-    // Step 8: Push
-    await git.push(branchName);
-    console.log(`Pushed ${branchName}\n`);
+    console.log('');
+    await withSpinner(`Creating branch ${branchName}`, () =>
+      git.createAndCheckoutBranch(branchName),
+    );
+    await withSpinner('Staging changes', () => git.addAll());
+    await withSpinner('Committing', async () => {
+      commitSha = await git.commit(result.commitMessage);
+    });
+    await withSpinner(`Pushing ${branchName}`, () => git.push(branchName));
   } catch (err: any) {
     console.error(
-      `\n\x1b[31mFailed during staging branch workflow: ${err.message}\x1b[0m`,
+      `\n${theme.error(
+        `Failed during staging branch workflow: ${err.message}`,
+      )}`,
     );
     console.error('Attempting to return to staging branch...');
     try {
@@ -127,25 +142,20 @@ export async function runWorkflow(
   }
 
   try {
-    // Step 9: Checkout develop
-    console.log('--- Develop branch workflow ---');
-    await git.checkout('develop');
-
-    // Step 10: Pull
-    await git.pull('develop');
-
-    // Step 11: Create dev branch
-    await git.createAndCheckoutBranch(devBranchName);
-
-    // Step 12: Cherry-pick
-    await git.cherryPick(commitSha);
-
-    // Step 13: Push dev branch
-    await git.push(devBranchName);
-    console.log(`Pushed ${devBranchName}\n`);
+    await withSpinner('Switching to develop', () => git.checkout('develop'));
+    await withSpinner('Pulling develop', () => git.pull('develop'));
+    await withSpinner(`Creating branch ${devBranchName}`, () =>
+      git.createAndCheckoutBranch(devBranchName),
+    );
+    await withSpinner('Cherry-picking commit', () => git.cherryPick(commitSha));
+    await withSpinner(`Pushing ${devBranchName}`, () =>
+      git.push(devBranchName),
+    );
   } catch (err: any) {
     console.error(
-      `\n\x1b[31mFailed during develop branch workflow: ${err.message}\x1b[0m`,
+      `\n${theme.error(
+        `Failed during develop branch workflow: ${err.message}`,
+      )}`,
     );
     console.error(
       `\nThe staging branch "${branchName}" was pushed successfully.`,
@@ -157,7 +167,7 @@ export async function runWorkflow(
     throw err;
   }
 
-  // Step 14: Return to staging
+  // Return to staging
   try {
     await git.checkout('staging');
   } catch {
@@ -166,7 +176,7 @@ export async function runWorkflow(
     );
   }
 
-  console.log('\x1b[32mDone!\x1b[0m');
-  console.log(`  ${branchName} → pushed`);
-  console.log(`  ${devBranchName} → pushed`);
+  console.log(`\n${theme.primary('✓ Done!')}`);
+  console.log(`  ${theme.primary(branchName)} → pushed`);
+  console.log(`  ${theme.primary(devBranchName)} → pushed`);
 }

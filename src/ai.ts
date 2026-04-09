@@ -1,4 +1,5 @@
 import { Config } from './config';
+import { Spinner } from './spinner';
 
 export interface AiResult {
   type: string;
@@ -72,7 +73,7 @@ async function callOpenAI(diff: string, config: Config): Promise<string> {
   const OpenAI = (await import('openai')).default;
   const client = new OpenAI({ apiKey: config.apiKey });
 
-  const model = config.model || 'gpt-5.4-nano';
+  const model = config.model || 'gpt-4o-mini';
   const response = await client.chat.completions.create({
     model,
     max_completion_tokens: 200,
@@ -93,7 +94,17 @@ export async function analyzeChanges(
   diff: string,
   config: Config,
 ): Promise<AiResult> {
-  const callAI = config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
-  const text = await callAI(diff, config);
-  return parseResponse(text, config.flags);
+  const spinner = new Spinner();
+  spinner.start('Thinking...');
+  try {
+    const callAI =
+      config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
+    const text = await callAI(diff, config);
+    const result = parseResponse(text, config.flags);
+    spinner.stop();
+    return result;
+  } catch (err) {
+    spinner.stop();
+    throw err;
+  }
 }

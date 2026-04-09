@@ -1,7 +1,8 @@
 import execa from 'execa';
+import { theme } from './theme';
 
 function log(cmd: string) {
-  console.log(`\x1b[90m> ${cmd}\x1b[0m`);
+  console.log(theme.muted(`> ${cmd}`));
 }
 
 async function run(cmd: string, args: string[]): Promise<string> {
