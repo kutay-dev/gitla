@@ -1,4 +1,5 @@
 import { Config } from './config';
+import { AI_THINKING_VERBS } from './constants/common.const';
 import { Spinner } from './spinner';
 
 export interface AiResult {
@@ -27,7 +28,10 @@ function truncateDiff(diff: string): string {
   return diff.slice(0, MAX_DIFF_LENGTH) + '\n... (truncated)';
 }
 
-function parseResponse(text: string, flags: string[]): Omit<AiResult, 'tokensUsed'> {
+function parseResponse(
+  text: string,
+  flags: string[],
+): Omit<AiResult, 'tokensUsed'> {
   const cleaned = text
     .replace(/```json?\n?/g, '')
     .replace(/```\n?/g, '')
@@ -48,7 +52,10 @@ function parseResponse(text: string, flags: string[]): Omit<AiResult, 'tokensUse
   };
 }
 
-async function callAnthropic(diff: string, config: Config): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
+async function callAnthropic(
+  diff: string,
+  config: Config,
+): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
   const client = new Anthropic({ apiKey: config.apiKey });
 
@@ -56,19 +63,28 @@ async function callAnthropic(diff: string, config: Config): Promise<{ text: stri
   const response = await client.messages.create({
     model,
     max_tokens: 200,
-    messages: [{ role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) }],
+    messages: [
+      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
+    ],
   });
 
   const block = response.content[0];
-  if (block.type !== 'text') throw new Error('Unexpected response type from Anthropic');
+  if (block.type !== 'text')
+    throw new Error('Unexpected response type from Anthropic');
 
   return {
     text: block.text,
-    tokensUsed: { input: response.usage.input_tokens, output: response.usage.output_tokens },
+    tokensUsed: {
+      input: response.usage.input_tokens,
+      output: response.usage.output_tokens,
+    },
   };
 }
 
-async function callOpenAI(diff: string, config: Config): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
+async function callOpenAI(
+  diff: string,
+  config: Config,
+): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const OpenAI = (await import('openai')).default;
   const client = new OpenAI({ apiKey: config.apiKey });
 
@@ -76,7 +92,9 @@ async function callOpenAI(diff: string, config: Config): Promise<{ text: string;
   const response = await client.chat.completions.create({
     model,
     max_completion_tokens: 200,
-    messages: [{ role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) }],
+    messages: [
+      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
+    ],
   });
 
   const content = response.choices[0]?.message?.content;
@@ -91,12 +109,17 @@ async function callOpenAI(diff: string, config: Config): Promise<{ text: string;
   };
 }
 
-export async function analyzeChanges(diff: string, config: Config): Promise<AiResult> {
+export async function analyzeChanges(
+  diff: string,
+  config: Config,
+): Promise<AiResult> {
+  const verb = AI_THINKING_VERBS[Math.floor(Math.random() * AI_THINKING_VERBS.length)];
   const spinner = new Spinner();
-  spinner.start('Thinking...');
+  spinner.start(`${verb}...`);
   const start = Date.now();
   try {
-    const callAI = config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
+    const callAI =
+      config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
     const { text, tokensUsed } = await callAI(diff, config);
     const elapsedMs = Date.now() - start;
     const result = parseResponse(text, config.flags);
