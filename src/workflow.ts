@@ -92,7 +92,9 @@ export async function runWorkflow(
   if (result.tokensUsed) {
     const secs = (result.tokensUsed.elapsedMs / 1000).toFixed(1);
     console.log(
-      `  ${theme.muted('Tokens used:')}    ${result.tokensUsed.input} in / ${result.tokensUsed.output} out in ${secs}s`,
+      `  ${theme.muted('Tokens used:')}    ${result.tokensUsed.input} in / ${
+        result.tokensUsed.output
+      } out in ${secs}s`,
     );
   }
   console.log('');
@@ -188,4 +190,53 @@ export async function runWorkflow(
   console.log(`\n${theme.primary('✓ Done!')}`);
   console.log(`  ${theme.primary(branchName)} → pushed`);
   console.log(`  ${theme.primary(devBranchName)} → pushed`);
+
+  const openPr =
+    config.alwaysOpenPR || (await confirm('\nOpen PR to develop? [Y/n] '));
+  if (openPr) {
+    await createPr(devBranchName, 'develop', result.commitMessage);
+  }
+}
+
+async function createPr(
+  head: string,
+  base: string,
+  title: string,
+): Promise<void> {
+  try {
+    const execa = (await import('execa')).default;
+    const { stdout } = await execa('gh', [
+      'pr',
+      'create',
+      '--head',
+      head,
+      '--base',
+      base,
+      '--title',
+      title,
+      '--body',
+      '',
+    ]);
+    const url = stdout.trim();
+    console.log(`  ${theme.primary('PR opened:')} ${url}`);
+
+    try {
+      await execa('pbcopy', [], { input: url });
+      console.log(`  ${theme.primary('\n* URL copied to clipboard *\n')}`);
+    } catch {
+      // pbcopy not available (non-macOS), silently skip
+    }
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      console.error(
+        theme.error(
+          '  gh CLI not found. Install it from https://cli.github.com',
+        ),
+      );
+    } else {
+      console.error(
+        theme.error(`  Failed to open PR: ${err.stderr || err.message}`),
+      );
+    }
+  }
 }

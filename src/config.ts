@@ -9,6 +9,7 @@ export interface Config {
   apiKey: string;
   model?: string;
   flags: string[];
+  alwaysOpenPR?: boolean;
 }
 
 export const CONFIG_PATH = path.join(os.homedir(), '.gitlarc.json');
@@ -20,9 +21,12 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
 }
 
 async function runSetup(): Promise<Config> {
-  console.log('No config found. Let\'s set it up:\n');
+  console.log("No config found. Let's set it up:\n");
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
 
   const board = await ask(rl, 'Jira board name (e.g. TTBO): ');
 
@@ -38,8 +42,14 @@ async function runSetup(): Promise<Config> {
 
   const apiKey = await ask(rl, 'API key: ');
 
-  const flagsInput = await ask(rl, 'Branch type flags, comma separated (e.g. feature,bugfix,chore): ');
-  const flags = flagsInput.split(',').map((f) => f.trim()).filter(Boolean);
+  const flagsInput = await ask(
+    rl,
+    'Branch type flags, comma separated (e.g. feature,bugfix,chore): ',
+  );
+  const flags = flagsInput
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
 
   rl.close();
 
@@ -55,11 +65,13 @@ async function runSetup(): Promise<Config> {
 
 function validateConfig(config: Config): void {
   if (!config.board) throw new Error('"board" is required in ~/.gitlarc.json');
-  if (!config.apiKey) throw new Error('"apiKey" is required in ~/.gitlarc.json');
+  if (!config.apiKey)
+    throw new Error('"apiKey" is required in ~/.gitlarc.json');
   if (!['anthropic', 'openai'].includes(config.aiProvider)) {
     throw new Error(`"aiProvider" must be "anthropic" or "openai"`);
   }
-  if (!config.flags.length) throw new Error('"flags" must be a non-empty array in ~/.gitlarc.json');
+  if (!config.flags.length)
+    throw new Error('"flags" must be a non-empty array in ~/.gitlarc.json');
 }
 
 export async function loadConfig(): Promise<Config> {
@@ -74,6 +86,7 @@ export async function loadConfig(): Promise<Config> {
     apiKey: fileConfig.apiKey || '',
     model: fileConfig.model,
     flags: fileConfig.flags || ['feature', 'bugfix'],
+    alwaysOpenPR: fileConfig.alwaysOpenPR ?? false,
   };
 
   validateConfig(config);
