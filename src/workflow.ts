@@ -14,6 +14,7 @@ export interface WorkflowOptions {
   yes?: boolean;
   skipBuild?: boolean;
   ai?: boolean;
+  update?: boolean;
 }
 
 function confirm(question: string): Promise<boolean> {
@@ -80,6 +81,80 @@ export async function runWorkflow(
   config: Config,
   options: WorkflowOptions,
 ): Promise<void> {
+  const PROTECTED_BRANCHES = ['staging', 'develop', 'master', 'main'];
+
+  // Update mode: already on a task branch, just commit + sync dev branch
+  if (options.update) {
+    const currentBranch = await git.getCurrentBranch();
+    if (PROTECTED_BRANCHES.includes(currentBranch)) {
+      throw new Error(
+        `You are on "${currentBranch}". Update mode is for task branches only. Use -b to create a new branch.`,
+      );
+    }
+
+    const devBranchName = `${currentBranch}-dev`;
+    const commitMessage = options.message!;
+
+    if (!options.skipBuild) {
+      try { await runLint(); } catch (err: any) {
+        throw new Error(`Lint failed — fix errors before committing.\n${err.message}`);
+      }
+      if (config.buildBeforeProceed) {
+        try { await runBuild(); } catch (err: any) {
+          throw new Error(`Build failed — fix errors before committing.\n${err.message}`);
+        }
+      }
+      console.log(`\n${theme.primary('✓')} Checks passed`);
+    }
+
+    const diff = await git.getDiff();
+    if (!diff.trim()) throw new Error('No changes detected. Stage or modify some files first.');
+
+    console.log(`\n  ${theme.muted('Branch:')}         ${theme.primary(currentBranch)}`);
+    console.log(`  ${theme.muted('Dev branch:')}     ${theme.primary(devBranchName)}`);
+    console.log(`  ${theme.muted('Commit message:')} ${commitMessage}\n`);
+
+    let commitSha = '';
+    await withSpinner('Staging changes', () => git.addAll());
+    await withSpinner('Committing', async () => { commitSha = await git.commit(commitMessage); });
+    await withSpinner(`Pushing ${currentBranch}`, () => git.push(currentBranch));
+
+    const devExists = await git.branchExists(devBranchName);
+    await withSpinner('Switching to develop', () => git.checkout('develop'));
+    await withSpinner('Pulling develop', () => git.pull('develop'));
+
+    if (devExists) {
+      await withSpinner(`Checking out ${devBranchName}`, () => git.checkout(devBranchName));
+    } else {
+      await withSpinner(`Creating branch ${devBranchName}`, () => git.createAndCheckoutBranch(devBranchName));
+    }
+
+    try {
+      await withSpinner('Cherry-picking commit', () => git.cherryPick(commitSha));
+    } catch (cherryErr: any) {
+      const conflictFiles = await git.getConflictedFiles();
+      console.log(`\n${theme.warning('⚠ Cherry-pick conflict detected')}`);
+      console.log(theme.muted('Conflicted files:'));
+      conflictFiles.forEach((f) => console.log(`  ${theme.error(f)}`));
+      console.log(`\nFix the conflicts in your editor, then stage the files with ${theme.muted('git add .')}`);
+      const resolved = await confirm('\nConflicts resolved? [Y/n] ');
+      if (!resolved) throw cherryErr;
+      await withSpinner('Continuing cherry-pick', () => git.cherryPickContinue());
+    }
+
+    await withSpinner(`Pushing ${devBranchName}`, () => git.push(devBranchName));
+    await git.checkout(currentBranch);
+
+    await notify('gitla', `${currentBranch} updated`);
+    console.log(`\n${theme.primary('✓ Done!')}`);
+    console.log(`  ${theme.primary(currentBranch)} → pushed`);
+    console.log(`  ${theme.primary(devBranchName)} → pushed`);
+
+    const openPr = config.alwaysOpenPR || (await confirm('\nOpen PR to develop? [Y/n] '));
+    if (openPr) await createPr(devBranchName, 'develop', commitMessage);
+    return;
+  }
+
   // Step 1: Verify we're on staging
   const currentBranch = await git.getCurrentBranch();
   if (currentBranch !== 'staging') {

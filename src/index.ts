@@ -20,7 +20,9 @@ program
   .action(async (opts: any) => {
     try {
       const isManual = !!(opts.branch && opts.message);
-      if (!opts.ai && !isManual) {
+      const isUpdate = !!(opts.message && !opts.branch && !opts.ai);
+
+      if (!opts.ai && !isManual && !isUpdate) {
         if (!fs.existsSync(CONFIG_PATH)) {
           await runSetup();
         } else {
@@ -30,6 +32,16 @@ program
       }
 
       const config = await loadConfig();
+
+      if (isUpdate) {
+        await runWorkflow('', config, {
+          message: opts.message,
+          yes: opts.yes,
+          skipBuild: opts.skipBuild,
+          update: true,
+        });
+        return;
+      }
 
       let taskNumber: string;
       let type: string | undefined;
