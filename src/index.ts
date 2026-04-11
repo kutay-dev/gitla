@@ -14,7 +14,7 @@ program
   .description('Automate git branch/commit/push/cherry-pick workflow')
   .option('--ai <taskNumber>', 'Use AI to generate branch type and commit message')
   .option('-m, --message <msg>', 'Commit message (use with -b for fully manual mode)')
-  .option('-b, --branch <type/taskNumber>', 'Branch type and task number (e.g. feat/123)')
+  .option('-b, --branch <type-taskNumber>', 'Branch type and task number (e.g. feat-123)')
   .option('-y, --yes', 'Skip confirmation prompt')
   .option('--skip-build', 'Skip the build step even if buildBeforeProceed is enabled')
   .action(async (opts: any) => {
@@ -35,16 +35,16 @@ program
       let type: string | undefined;
 
       if (opts.branch) {
-        const slash = opts.branch.indexOf('/');
-        if (slash === -1) {
-          console.error(theme.error('Error: -b format must be <type>/<taskNumber> (e.g. feat/123)'));
+        const sep = opts.branch.indexOf('-');
+        if (sep === -1) {
+          console.error(theme.error('Error: -b format must be <type>-<taskNumber> (e.g. feat-123)'));
           process.exit(1);
         }
-        type = opts.branch.slice(0, slash);
-        taskNumber = opts.branch.slice(slash + 1);
+        type = opts.branch.slice(0, sep);
+        taskNumber = opts.branch.slice(sep + 1);
 
         if (!type || !taskNumber) {
-          console.error(theme.error('Error: -b format must be <type>/<taskNumber> (e.g. feat/123)'));
+          console.error(theme.error('Error: -b format must be <type>-<taskNumber> (e.g. feat-123)'));
           process.exit(1);
         }
 

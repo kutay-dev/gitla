@@ -12,6 +12,8 @@ export interface AiConfig {
 
 export interface Config {
   board: string;
+  branchPattern: string;
+  commitPattern: string;
   ai?: AiConfig;
   alwaysOpenPR: boolean;
   buildBeforeProceed: boolean;
@@ -25,8 +27,16 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
+function validatePattern(pattern: string, field: string): void {
+  if (!pattern.includes('{board}') || !pattern.includes('{task}')) {
+    throw new Error(`"${field}" must include {board} and {task} tokens`);
+  }
+}
+
 export async function runSetup(): Promise<Config> {
-  console.log("No config found. Let's set it up:\n");
+  console.log("No config found. Let's set it up, you can edit this later:\n");
+  console.log('  Available tokens: {type}, {board}, {task}');
+  console.log('  {board} and {task} are required in both patterns, {type} is optional\n');
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -34,6 +44,32 @@ export async function runSetup(): Promise<Config> {
   });
 
   const board = await ask(rl, 'Jira board name (e.g. TTBO): ');
+
+  let branchPattern: string;
+  while (true) {
+    const input = await ask(rl, 'Branch name pattern (press enter for default "{type}/{board}-{task}"): ');
+    if (!input) { branchPattern = '{type}/{board}-{task}'; break; }
+    try {
+      validatePattern(input, 'branchPattern');
+      branchPattern = input;
+      break;
+    } catch (e: any) {
+      console.log(`  ${e.message}`);
+    }
+  }
+
+  let commitPattern: string;
+  while (true) {
+    const input = await ask(rl, 'Commit message prefix pattern (press enter for default "{type}: [{board}-{task}]"): ');
+    if (!input) { commitPattern = '{type}: [{board}-{task}]'; break; }
+    try {
+      validatePattern(input, 'commitPattern');
+      commitPattern = input;
+      break;
+    } catch (e: any) {
+      console.log(`  ${e.message}`);
+    }
+  }
 
   let ai: AiConfig | undefined;
   const providerInput = await ask(rl, 'AI provider (anthropic/openai) — press enter to skip AI: ');
@@ -63,7 +99,7 @@ export async function runSetup(): Promise<Config> {
 
   rl.close();
 
-  const config: Config = { board, ai, alwaysOpenPR, buildBeforeProceed };
+  const config: Config = { board, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed };
 
   validateConfig(config);
 
@@ -75,6 +111,10 @@ export async function runSetup(): Promise<Config> {
 
 function validateConfig(config: Config): void {
   if (!config.board) throw new Error('"board" is required in ~/.gitlarc.json');
+  if (!config.branchPattern) throw new Error('"branchPattern" is required in ~/.gitlarc.json');
+  if (!config.commitPattern) throw new Error('"commitPattern" is required in ~/.gitlarc.json');
+  validatePattern(config.branchPattern, 'branchPattern');
+  validatePattern(config.commitPattern, 'commitPattern');
   if (config.ai) {
     if (!config.ai.apiKey) throw new Error('"ai.apiKey" is required in ~/.gitlarc.json');
     if (!['anthropic', 'openai'].includes(config.ai.provider)) {
@@ -95,6 +135,8 @@ export async function loadConfig(): Promise<Config> {
 
   const config: Config = {
     board: raw.board || '',
+    branchPattern: raw.branchPattern || '',
+    commitPattern: raw.commitPattern || '',
     ai: raw.ai
       ? {
           provider: raw.ai.provider || 'anthropic',

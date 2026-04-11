@@ -126,9 +126,15 @@ export async function runWorkflow(
     if (options.message) result.commitMessage = options.message;
   }
 
-  const branchName = `${result.type}/${config.board}-${taskNumber}`;
+  const applyPattern = (pattern: string) =>
+    pattern
+      .replace('{type}', result.type)
+      .replace('{board}', config.board)
+      .replace('{task}', taskNumber);
+
+  const branchName = applyPattern(config.branchPattern);
   const devBranchName = `${branchName}-dev`;
-  result.commitMessage = `${branchName} ${result.commitMessage}`;
+  result.commitMessage = `${applyPattern(config.commitPattern)} ${result.commitMessage}`;
 
   // Step 4: Show and confirm
   console.log(
