@@ -1,10 +1,16 @@
 import execa from 'execa';
 
+let enabled = true;
+
+export function setNotificationsEnabled(value: boolean): void {
+  enabled = value;
+}
+
 export async function notify(title: string, message: string): Promise<void> {
-  // Terminal bell — universal fallback
+  if (!enabled) return;
+
   process.stdout.write('\x07');
 
-  // macOS native notification
   try {
     await execa('osascript', [
       '-e',

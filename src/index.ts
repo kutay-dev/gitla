@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import { CONFIG_PATH, loadConfig, runSetup } from './config';
-import { notify } from './notify';
+import { notify, setNotificationsEnabled } from './notify';
 import { theme } from './theme';
 import { runUnfuck } from './unfuck';
 import { runWorkflow } from './workflow';
@@ -23,6 +23,7 @@ program
     try {
       if (opts.unfuck) {
         const config = await loadConfig();
+        setNotificationsEnabled(config.enableNotifications);
         await runUnfuck(opts.unfuck, config);
         return;
       }
@@ -40,6 +41,7 @@ program
       }
 
       const config = await loadConfig();
+      setNotificationsEnabled(config.enableNotifications);
 
       if (isUpdate) {
         await runWorkflow('', config, {

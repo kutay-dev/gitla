@@ -17,6 +17,7 @@ export interface Config {
   ai?: AiConfig;
   alwaysOpenPR: boolean;
   buildBeforeProceed: boolean;
+  enableNotifications: boolean;
 }
 
 export const CONFIG_PATH = path.join(os.homedir(), '.gitlarc.json');
@@ -97,9 +98,12 @@ export async function runSetup(): Promise<Config> {
   const buildInput = await ask(rl, 'Run build check before proceeding? (y/n): ');
   const buildBeforeProceed = buildInput.toLowerCase() === 'y';
 
+  const notifInput = await ask(rl, 'Enable notifications? (y/n): ');
+  const enableNotifications = notifInput.toLowerCase() === 'y';
+
   rl.close();
 
-  const config: Config = { board, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed };
+  const config: Config = { board, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed, enableNotifications };
 
   validateConfig(config);
 
@@ -126,12 +130,40 @@ function validateConfig(config: Config): void {
   }
 }
 
+const DEFAULTS: Record<string, any> = {
+  branchPattern: '{type}/{board}-{task}',
+  commitPattern: '{type}: [{board}-{task}]',
+  alwaysOpenPR: false,
+  buildBeforeProceed: true,
+  enableNotifications: false,
+};
+
+function migrateConfig(raw: any): any {
+  const added: string[] = [];
+
+  for (const [key, value] of Object.entries(DEFAULTS)) {
+    if (raw[key] === undefined) {
+      raw[key] = value;
+      added.push(key);
+    }
+  }
+
+  if (added.length > 0) {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(raw, null, 2) + '\n');
+    console.log(`New config fields added with defaults: ${added.join(', ')}`);
+    console.log(`Run "gitla config" to review your config.\n`);
+  }
+
+  return raw;
+}
+
 export async function loadConfig(): Promise<Config> {
   if (!fs.existsSync(CONFIG_PATH)) {
     return runSetup();
   }
 
-  const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  let raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  raw = migrateConfig(raw);
 
   const config: Config = {
     board: raw.board || '',
@@ -147,6 +179,7 @@ export async function loadConfig(): Promise<Config> {
       : undefined,
     alwaysOpenPR: raw.alwaysOpenPR ?? false,
     buildBeforeProceed: raw.buildBeforeProceed ?? true,
+    enableNotifications: raw.enableNotifications ?? true,
   };
 
   validateConfig(config);
