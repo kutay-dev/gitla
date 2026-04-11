@@ -85,6 +85,25 @@ When you're already on a task branch (anything that's not `staging`, `develop`, 
 
 ---
 
+### Unfuck mode — remove changes from staging before a prod deploy
+
+When you need to merge staging to master but some changes shouldn't go to prod yet, `--unfuck` removes them cleanly without messing up the git history. It creates a new `undo/{original-branch-name}` branch, applies the inverse of the commits, and opens a PR back to staging.
+
+```bash
+# By full branch name — finds all commits matching it in staging
+gitla --unfuck TTBO-123
+
+# Single commit
+gitla --unfuck a1b2c3d
+
+# Range of commits (includes both ends, order doesn't matter, gitla figures it out)
+gitla --unfuck a1b2c3d e4f5g6h
+```
+
+Must be on `staging`. The undo branch is named after the original branch (e.g. `undo/feat/TTBO-123`).
+
+---
+
 ## Options
 
 | Flag | Description |
@@ -92,6 +111,7 @@ When you're already on a task branch (anything that's not `staging`, `develop`, 
 | `--ai <taskNumber>` | AI mode — generates branch type and commit message |
 | `-b <type-task>` | Branch type and task number (e.g. `feat-123`) |
 | `-m <message>` | Commit message |
+| `--unfuck <target>` | Remove changes by ticket or commit hash(es) from staging |
 | `-y, --yes` | Skip confirmation prompt |
 | `--skip-build` | Skip lint and build checks for this run |
 

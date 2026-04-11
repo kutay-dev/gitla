@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { CONFIG_PATH, loadConfig, runSetup } from './config';
 import { notify } from './notify';
 import { theme } from './theme';
+import { runUnfuck } from './unfuck';
 import { runWorkflow } from './workflow';
 
 const program = new Command();
@@ -15,10 +16,17 @@ program
   .option('--ai <taskNumber>', 'Use AI to generate branch type and commit message')
   .option('-m, --message <msg>', 'Commit message (use with -b for fully manual mode)')
   .option('-b, --branch <type-taskNumber>', 'Branch type and task number (e.g. feat-123)')
+  .option('--unfuck <target...>', 'Undo changes by ticket (e.g. TTBO-123) or commit hash(es)')
   .option('-y, --yes', 'Skip confirmation prompt')
   .option('--skip-build', 'Skip the build step even if buildBeforeProceed is enabled')
   .action(async (opts: any) => {
     try {
+      if (opts.unfuck) {
+        const config = await loadConfig();
+        await runUnfuck(opts.unfuck, config);
+        return;
+      }
+
       const isManual = !!(opts.branch && opts.message);
       const isUpdate = !!(opts.message && !opts.branch && !opts.ai);
 

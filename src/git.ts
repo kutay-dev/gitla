@@ -81,3 +81,39 @@ export async function getConflictedFiles(): Promise<string[]> {
 export async function cherryPickContinue(): Promise<void> {
   await run('git', ['cherry-pick', '--continue', '--no-edit']);
 }
+
+export async function findCommitsByTicket(ticket: string): Promise<string[]> {
+  const result = await execa('git', ['log', '--grep', ticket, '--format=%H', '--reverse']);
+  return result.stdout.trim().split('\n').filter(Boolean);
+}
+
+export async function getCommitOneliner(sha: string): Promise<string> {
+  return run('git', ['log', '--oneline', '-1', sha]);
+}
+
+export async function getCommitSubject(sha: string): Promise<string> {
+  return run('git', ['log', '--format=%s', '-1', sha]);
+}
+
+async function isMergeCommit(sha: string): Promise<boolean> {
+  const result = await execa('git', ['rev-parse', `${sha}^2`]).catch(() => null);
+  return result !== null;
+}
+
+export async function revertNoCommit(shas: string[]): Promise<void> {
+  for (const sha of shas) {
+    const merge = await isMergeCommit(sha);
+    const args = merge
+      ? ['revert', '--no-commit', '-m', '1', sha]
+      : ['revert', '--no-commit', sha];
+    await run('git', args);
+  }
+}
+
+export async function findCommitsInRange(a: string, b: string): Promise<string[]> {
+  // Determine which commit is the ancestor (older) automatically
+  const aIsAncestor = await execa('git', ['merge-base', '--is-ancestor', a, b]).then(() => true).catch(() => false);
+  const [oldest, newest] = aIsAncestor ? [a, b] : [b, a];
+  const result = await execa('git', ['log', '--format=%H', '--reverse', `${oldest}^..${newest}`]);
+  return result.stdout.trim().split('\n').filter(Boolean);
+}
