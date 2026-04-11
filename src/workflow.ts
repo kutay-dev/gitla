@@ -76,6 +76,20 @@ async function withSpinner<T>(
   }
 }
 
+function tokensFromBranch(branch: string, pattern: string): { type?: string; board?: string; task?: string } {
+  const regexStr = pattern
+    .replace('{type}', '\x00TYPE\x00')
+    .replace('{board}', '\x00BOARD\x00')
+    .replace('{task}', '\x00TASK\x00')
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace('\x00TYPE\x00', '(?<type>[^/\\-]+)')
+    .replace('\x00BOARD\x00', '(?<board>[^/\\-]+)')
+    .replace('\x00TASK\x00', '(?<task>.+)');
+
+  const match = branch.match(new RegExp(`^${regexStr}$`));
+  return match?.groups ?? {};
+}
+
 export async function runWorkflow(
   taskNumber: string,
   config: Config,
@@ -93,7 +107,16 @@ export async function runWorkflow(
     }
 
     const devBranchName = `${currentBranch}-dev`;
-    const commitMessage = options.message!;
+
+    const tokens = tokensFromBranch(currentBranch, config.branchPattern);
+    const applyCommitPattern = (msg: string) => {
+      const prefix = config.commitPattern
+        .replace('{type}', tokens.type || '')
+        .replace('{board}', tokens.board || config.board)
+        .replace('{task}', tokens.task || '');
+      return `${prefix} ${msg}`.trim();
+    };
+    const commitMessage = applyCommitPattern(options.message!);
 
     if (!options.skipBuild) {
       try { await runLint(); } catch (err: any) {
