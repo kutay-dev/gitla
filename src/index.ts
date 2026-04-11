@@ -1,41 +1,37 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import * as readline from 'readline';
-import { loadConfig } from './config';
+import * as fs from 'fs';
+import { CONFIG_PATH, loadConfig, runSetup } from './config';
 import { notify } from './notify';
 import { theme } from './theme';
 import { runWorkflow } from './workflow';
-
-function askTaskNumber(): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise((resolve) => {
-    rl.question('Task number: ', (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
 
 const program = new Command();
 
 program
   .name('gitla')
   .description('Automate git branch/commit/push/cherry-pick workflow')
-  .argument('[taskNumber]', 'Jira task number (e.g. 123)')
-  .option('--dry-run', 'Show what would happen without making changes')
-  .option('-m, --message <msg>', 'Commit message (skips AI message generation)')
-  .option('-b, --branch <flag/taskNumber>', 'Branch type and task number (e.g. feat/123), skips AI entirely when combined with -m')
+  .option('--ai <taskNumber>', 'Use AI to generate branch type and commit message')
+  .option('-m, --message <msg>', 'Commit message (use with -b for fully manual mode)')
+  .option('-b, --branch <type/taskNumber>', 'Branch type and task number (e.g. feat/123)')
   .option('-y, --yes', 'Skip confirmation prompt')
   .option('--skip-build', 'Skip the build step even if buildBeforeProceed is enabled')
-  .action(async (argTaskNumber: string | undefined, opts: any) => {
+  .action(async (opts: any) => {
     try {
+      const isManual = !!(opts.branch && opts.message);
+      if (!opts.ai && !isManual) {
+        if (!fs.existsSync(CONFIG_PATH)) {
+          await runSetup();
+        } else {
+          program.help();
+        }
+        return;
+      }
+
       const config = await loadConfig();
 
-      let taskNumber = argTaskNumber;
+      let taskNumber: string;
       let type: string | undefined;
 
       if (opts.branch) {
@@ -52,14 +48,12 @@ program
           process.exit(1);
         }
 
-        if (!config.flags.includes(type)) {
-          console.error(theme.error(`Error: branch type "${type}" must be one of: ${config.flags.join(', ')}`));
+        if (config.ai && !config.ai.flags.includes(type)) {
+          console.error(theme.error(`Error: branch type "${type}" must be one of: ${config.ai.flags.join(', ')}`));
           process.exit(1);
         }
-      }
-
-      if (!taskNumber) {
-        taskNumber = await askTaskNumber();
+      } else {
+        taskNumber = opts.ai;
       }
 
       if (!taskNumber) {
@@ -68,16 +62,28 @@ program
       }
 
       await runWorkflow(taskNumber, config, {
-        dryRun: opts.dryRun,
         message: opts.message,
         type,
         yes: opts.yes,
         skipBuild: opts.skipBuild,
+        ai: !!opts.ai,
       });
     } catch (err: any) {
       await notify('gitla', 'Failed — check your terminal');
       console.error(`\n${theme.error(`Error: ${err.message}`)}`);
       process.exit(1);
+    }
+  });
+
+program
+  .command('config')
+  .description('Open the config file in your editor')
+  .action(async () => {
+    try {
+      const execa = (await import('execa')).default;
+      await execa('open', [CONFIG_PATH]);
+    } catch {
+      console.log(`Could not open file. Edit it manually:\n\n  ${theme.primary(CONFIG_PATH)}`);
     }
   });
 

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "update": "tsc && npm link"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

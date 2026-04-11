@@ -9,11 +9,11 @@ import { Spinner } from './spinner';
 import { theme } from './theme';
 
 export interface WorkflowOptions {
-  dryRun?: boolean;
   message?: string;
   type?: string;
   yes?: boolean;
   skipBuild?: boolean;
+  ai?: boolean;
 }
 
 function confirm(question: string): Promise<boolean> {
@@ -118,6 +118,9 @@ export async function runWorkflow(
   if (options.message && options.type) {
     result = { type: options.type, commitMessage: options.message };
   } else {
+    if (!options.ai) {
+      throw new Error('AI is disabled. Use --ai flag or provide both -b and -m for manual mode.');
+    }
     result = await analyzeChanges(diff, config);
     if (options.type) result.type = options.type;
     if (options.message) result.commitMessage = options.message;
@@ -147,11 +150,6 @@ export async function runWorkflow(
     );
   }
   console.log('');
-
-  if (options.dryRun) {
-    console.log('Dry run — no changes made.');
-    return;
-  }
 
   const manualMode = !!(options.type && options.message);
   if (!options.yes && !manualMode) {

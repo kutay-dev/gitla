@@ -3,14 +3,18 @@ import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
 
-export interface Config {
-  board: string;
-  aiProvider: 'anthropic' | 'openai';
+export interface AiConfig {
+  provider: 'anthropic' | 'openai';
   apiKey: string;
   model?: string;
   flags: string[];
-  alwaysOpenPR?: boolean;
-  buildBeforeProceed?: boolean;
+}
+
+export interface Config {
+  board: string;
+  ai?: AiConfig;
+  alwaysOpenPR: boolean;
+  buildBeforeProceed: boolean;
 }
 
 export const CONFIG_PATH = path.join(os.homedir(), '.gitlarc.json');
@@ -21,7 +25,7 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
-async function runSetup(): Promise<Config> {
+export async function runSetup(): Promise<Config> {
   console.log("No config found. Let's set it up:\n");
 
   const rl = readline.createInterface({
@@ -31,48 +35,55 @@ async function runSetup(): Promise<Config> {
 
   const board = await ask(rl, 'Jira board name (e.g. TTBO): ');
 
-  let aiProvider: 'anthropic' | 'openai';
-  while (true) {
-    const input = await ask(rl, 'AI provider (anthropic/openai): ');
-    if (input === 'anthropic' || input === 'openai') {
-      aiProvider = input;
-      break;
-    }
-    console.log('  Please enter "anthropic" or "openai"');
+  let ai: AiConfig | undefined;
+  const providerInput = await ask(rl, 'AI provider (anthropic/openai) — press enter to skip AI: ');
+
+  if (providerInput === 'anthropic' || providerInput === 'openai') {
+    const apiKey = await ask(rl, 'API key: ');
+
+    const flagsInput = await ask(
+      rl,
+      'Branch type flags, comma separated (e.g. feature,bugfix,chore): ',
+    );
+    const flags = flagsInput
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean);
+
+    ai = { provider: providerInput, apiKey, flags };
+  } else if (providerInput !== '') {
+    console.log('  Skipping AI setup (invalid provider entered).');
   }
 
-  const apiKey = await ask(rl, 'API key: ');
+  const alwaysOpenPRInput = await ask(rl, 'Always open a PR after push? (y/n): ');
+  const alwaysOpenPR = alwaysOpenPRInput.toLowerCase() === 'y';
 
-  const flagsInput = await ask(
-    rl,
-    'Branch type flags, comma separated (e.g. feature,bugfix,chore): ',
-  );
-  const flags = flagsInput
-    .split(',')
-    .map((f) => f.trim())
-    .filter(Boolean);
+  const buildInput = await ask(rl, 'Run build check before proceeding? (y/n): ');
+  const buildBeforeProceed = buildInput.toLowerCase() === 'y';
 
   rl.close();
 
-  const config: Config = { board, aiProvider, apiKey, flags };
+  const config: Config = { board, ai, alwaysOpenPR, buildBeforeProceed };
 
   validateConfig(config);
 
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
-  console.log(`\nConfig saved to ${CONFIG_PATH}\n`);
+  console.log(`\nConfig saved to ${CONFIG_PATH}\nYou can open it by running: 'gitla config'\n`);
 
   return config;
 }
 
 function validateConfig(config: Config): void {
   if (!config.board) throw new Error('"board" is required in ~/.gitlarc.json');
-  if (!config.apiKey)
-    throw new Error('"apiKey" is required in ~/.gitlarc.json');
-  if (!['anthropic', 'openai'].includes(config.aiProvider)) {
-    throw new Error(`"aiProvider" must be "anthropic" or "openai"`);
+  if (config.ai) {
+    if (!config.ai.apiKey) throw new Error('"ai.apiKey" is required in ~/.gitlarc.json');
+    if (!['anthropic', 'openai'].includes(config.ai.provider)) {
+      throw new Error('"ai.provider" must be "anthropic" or "openai"');
+    }
+    if (!config.ai.flags?.length) {
+      throw new Error('"ai.flags" must be a non-empty array in ~/.gitlarc.json');
+    }
   }
-  if (!config.flags.length)
-    throw new Error('"flags" must be a non-empty array in ~/.gitlarc.json');
 }
 
 export async function loadConfig(): Promise<Config> {
@@ -80,15 +91,20 @@ export async function loadConfig(): Promise<Config> {
     return runSetup();
   }
 
-  const fileConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+
   const config: Config = {
-    board: fileConfig.board || '',
-    aiProvider: fileConfig.aiProvider || 'anthropic',
-    apiKey: fileConfig.apiKey || '',
-    model: fileConfig.model,
-    flags: fileConfig.flags || ['feature', 'bugfix'],
-    alwaysOpenPR: fileConfig.alwaysOpenPR ?? false,
-    buildBeforeProceed: fileConfig.buildBeforeProceed ?? true,
+    board: raw.board || '',
+    ai: raw.ai
+      ? {
+          provider: raw.ai.provider || 'anthropic',
+          apiKey: raw.ai.apiKey || '',
+          model: raw.ai.model,
+          flags: raw.ai.flags || ['feature', 'bugfix'],
+        }
+      : undefined,
+    alwaysOpenPR: raw.alwaysOpenPR ?? false,
+    buildBeforeProceed: raw.buildBeforeProceed ?? true,
   };
 
   validateConfig(config);

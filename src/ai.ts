@@ -57,14 +57,14 @@ async function callAnthropic(
   config: Config,
 ): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
-  const client = new Anthropic({ apiKey: config.apiKey });
+  const client = new Anthropic({ apiKey: config.ai!.apiKey });
 
-  const model = config.model || 'claude-haiku-4-5-20251001';
+  const model = config.ai!.model || 'claude-haiku-4-5-20251001';
   const response = await client.messages.create({
     model,
     max_tokens: 200,
     messages: [
-      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
+      { role: 'user', content: buildPrompt(config.ai!.flags) + truncateDiff(diff) },
     ],
   });
 
@@ -86,14 +86,14 @@ async function callOpenAI(
   config: Config,
 ): Promise<{ text: string; tokensUsed: { input: number; output: number } }> {
   const OpenAI = (await import('openai')).default;
-  const client = new OpenAI({ apiKey: config.apiKey });
+  const client = new OpenAI({ apiKey: config.ai!.apiKey });
 
-  const model = config.model || 'gpt-4o-mini';
+  const model = config.ai!.model || 'gpt-5.4-mini';
   const response = await client.chat.completions.create({
     model,
     max_completion_tokens: 200,
     messages: [
-      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
+      { role: 'user', content: buildPrompt(config.ai!.flags) + truncateDiff(diff) },
     ],
   });
 
@@ -113,16 +113,19 @@ export async function analyzeChanges(
   diff: string,
   config: Config,
 ): Promise<AiResult> {
+  if (!config.ai) {
+    throw new Error('AI is not configured. Run "gitla config" and add your AI provider details.');
+  }
   const verb = AI_THINKING_VERBS[Math.floor(Math.random() * AI_THINKING_VERBS.length)];
   const spinner = new Spinner();
   spinner.start(`${verb}...`);
   const start = Date.now();
   try {
     const callAI =
-      config.aiProvider === 'anthropic' ? callAnthropic : callOpenAI;
+      config.ai!.provider === 'anthropic' ? callAnthropic : callOpenAI;
     const { text, tokensUsed } = await callAI(diff, config);
     const elapsedMs = Date.now() - start;
-    const result = parseResponse(text, config.flags);
+    const result = parseResponse(text, config.ai!.flags);
     spinner.stop();
     return { ...result, tokensUsed: { ...tokensUsed, elapsedMs } };
   } catch (err) {
