@@ -6,10 +6,13 @@ Git workflow automation CLI. From uncommitted changes to pushed branches in one 
 
 Automates the team's standard git flow:
 
-1. Runs lint + build checks
-2. Creates a task branch from `staging`, commits and pushes
-3. Checks out `develop`, creates a `-dev` branch, cherry-picks the commit, pushes
-4. Optionally opens a PR to `develop`
+1. Stashes your changes
+2. Pulls the latest `staging`
+3. Applies the latest stash, if success: pops the stash
+4. Runs lint + build checks
+5. Creates a task branch from `staging`, commits and pushes
+6. Checks out `develop`, creates a `-dev` branch, cherry-picks the commit, pushes
+7. Optionally opens a PR to `develop`
 
 ---
 
