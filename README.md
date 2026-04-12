@@ -7,12 +7,12 @@ Git workflow automation CLI. From uncommitted changes to pushed branches in one 
 Automates the team's standard git flow:
 
 1. Stashes your changes
-2. Pulls the latest `staging`
+2. Pulls the latest `source-branch`
 3. Applies the latest stash, if success: pops the stash
 4. Runs lint + build checks
-5. Creates a task branch from `staging`, commits and pushes
-6. Checks out `develop`, creates a `-dev` branch, cherry-picks the commit, pushes
-7. Optionally opens a PR to `develop`
+5. Creates a task branch from `source-branch`, commits and pushes
+6. Checks out `dev-branch`, creates a `-dev` branch, cherry-picks the commit, pushes
+7. Optionally opens a PR to `dev-branch`
 
 ---
 
@@ -56,7 +56,7 @@ Config is saved to `~/.gitlarc.json`
 gitla -b feat-123 -m "add login page"
 ```
 
-Must be on `staging`. `-b` takes `<type>-<taskNumber>`. No confirmation prompt in manual mode.
+Must be on `source-branch`. `-b` takes `<type>-<taskNumber>`. No confirmation prompt in manual mode.
 
 ---
 
@@ -74,13 +74,13 @@ gitla -m "fix edge case in login"
 gitla --ai 123
 ```
 
-Must be on `staging`. AI analyzes your diff, picks the branch type (`feat`, `fix`, etc.) and writes the commit message.
+Must be on `source-branch`. AI analyzes your diff, picks the branch type (`feat`, `fix`, etc.) and writes the commit message.
 
 Requires `ai` to be configured in `~/.gitlarc.json`
 
 ---
 
-When you're already on a task branch (anything that's not `staging`, `develop`, or `master`), gitla skips branch creation and:
+When you're already on a task branch (anything that's not `source-branch`, `dev-branch`, or `master`), gitla skips branch creation and:
 
 1. Commits and pushes the current branch
 2. Checks out the `-dev` branch (creates it if it doesn't exist), cherry-picks, pushes
@@ -88,12 +88,12 @@ When you're already on a task branch (anything that's not `staging`, `develop`, 
 
 ---
 
-### Unfuck mode — remove changes from staging before a prod deploy
+### Unfuck mode — remove changes from source-branch before a prod deploy
 
-When you need to merge staging to master but some changes shouldn't go to prod yet, `--unfuck` removes them cleanly without messing up the git history. It creates a new `undo/{original-branch-name}` branch, applies the inverse of the commits, and opens a PR back to staging.
+When you need to merge source-branch to master but some changes shouldn't go to prod yet, `--unfuck` removes them cleanly without messing up the git history. It creates a new `undo/{original-branch-name}` branch, applies the inverse of the commits, and opens a PR back to source-branch.
 
 ```bash
-# By full branch name — finds all commits matching it in staging
+# By full branch name — finds all commits matching it in source-branch
 gitla --unfuck TTBO-123
 
 # Single commit
@@ -103,7 +103,7 @@ gitla --unfuck a1b2c3d
 gitla --unfuck a1b2c3d e4f5g6h
 ```
 
-Must be on `staging`. The undo branch is named after the original branch (e.g. `undo/feat/TTBO-123`).
+Must be on `source-branch`. The undo branch is named after the original branch (e.g. `undo/feat/TTBO-123`).
 
 ---
 
@@ -114,7 +114,7 @@ Must be on `staging`. The undo branch is named after the original branch (e.g. `
 | `--ai <taskNumber>` | AI mode — generates branch type and commit message |
 | `-b <type-task>` | Branch type and task number (e.g. `feat-123`) |
 | `-m <message>` | Commit message |
-| `--unfuck <target>` | Remove changes by ticket or commit hash(es) from staging |
+| `--unfuck <target>` | Remove changes by ticket or commit hash(es) from source-branch |
 | `-y, --yes` | Skip confirmation prompt |
 | `--skip-build` | Skip lint and build checks for this run |
 
@@ -133,6 +133,8 @@ gitla config
 ```json
 {
   "board": "TTBO",
+  "sourceBranch": "staging",
+  "devBranch": "develop",
   "branchPattern": "{type}/{board}-{task}",
   "commitPattern": "{type}: [{board}-{task}]",
   "ai": {
@@ -142,22 +144,26 @@ gitla config
     "flags": ["feat", "fix", "refactor", "chore"]
   },
   "alwaysOpenPR": false,
-  "buildBeforeProceed": true
+  "buildBeforeProceed": true,
+  "enableNotifications": true
 }
 ```
 
 | Field | Required | Description |
 |---|---|---|
 | `board` | Yes | Jira board prefix (e.g. `TTBO`) |
+| `sourceBranch` | Yes | The branch you work on and create task branches from (e.g. `staging`) |
+| `devBranch` | Yes | The branch task changes get cherry-picked to (e.g. `develop`) |
 | `branchPattern` | Yes | Branch name template. Must include `{board}` and `{task}`. `{type}` is optional. |
 | `commitPattern` | Yes | Commit message prefix template. Same tokens. |
 | `ai` | No | Remove or omit to disable AI entirely |
 | `ai.provider` | Yes (if ai) | `anthropic` or `openai` |
 | `ai.apiKey` | Yes (if ai) | Your API key |
-| `ai.model` | No | Defaults to `claude-haiku-4-5-20251001` (Anthropic) or `gpt-5.4-mini` (OpenAI) |
+| `ai.model` | No | Defaults to `claude-haiku-4-5-20251001` (Anthropic) or `gpt-4o-mini` (OpenAI) |
 | `ai.flags` | Yes (if ai) | Branch type options AI can choose from |
 | `alwaysOpenPR` | No | Skip the PR prompt and always open one (default: `false`) |
 | `buildBeforeProceed` | No | Run `npm run build` before git operations (default: `true`) |
+| `enableNotifications` | No | macOS notifications + terminal bell on finish/fail (default: `true`) |
 
 ### Pattern tokens
 

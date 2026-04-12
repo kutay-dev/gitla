@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
+import { theme } from './theme';
 
 export interface AiConfig {
   provider: 'anthropic' | 'openai';
@@ -12,6 +13,8 @@ export interface AiConfig {
 
 export interface Config {
   board: string;
+  sourceBranch: string;  // branch you work on and create task branches from (e.g. staging)
+  devBranch: string;     // branch changes get cherry-picked to (e.g. develop)
   branchPattern: string;
   commitPattern: string;
   ai?: AiConfig;
@@ -36,8 +39,6 @@ function validatePattern(pattern: string, field: string): void {
 
 export async function runSetup(): Promise<Config> {
   console.log("No config found. Let's set it up, you can edit this later:\n");
-  console.log('  Available tokens: {type}, {board}, {task}');
-  console.log('  {board} and {task} are required in both patterns, {type} is optional\n');
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -45,6 +46,15 @@ export async function runSetup(): Promise<Config> {
   });
 
   const board = await ask(rl, 'Jira board name (e.g. TTBO): ');
+
+  const sourceBranchInput = await ask(rl, 'Source branch — the branch you work on and create task branches from (press enter for "staging"): ');
+  const sourceBranch = sourceBranchInput || 'staging';
+
+  const devBranchInput = await ask(rl, 'Dev branch — the branch task changes get cherry-picked to (press enter for "develop"): ');
+  const devBranch = devBranchInput || 'develop';
+
+  console.log('\n  Available tokens for patterns: {type}, {board}, {task}');
+  console.log('  {board} and {task} are required, {type} is optional\n');
 
   let branchPattern: string;
   while (true) {
@@ -103,7 +113,7 @@ export async function runSetup(): Promise<Config> {
 
   rl.close();
 
-  const config: Config = { board, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed, enableNotifications };
+  const config: Config = { board, sourceBranch, devBranch, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed, enableNotifications };
 
   validateConfig(config);
 
@@ -115,6 +125,8 @@ export async function runSetup(): Promise<Config> {
 
 function validateConfig(config: Config): void {
   if (!config.board) throw new Error('"board" is required in ~/.gitlarc.json');
+  if (!config.sourceBranch) throw new Error('"sourceBranch" is required in ~/.gitlarc.json');
+  if (!config.devBranch) throw new Error('"devBranch" is required in ~/.gitlarc.json');
   if (!config.branchPattern) throw new Error('"branchPattern" is required in ~/.gitlarc.json');
   if (!config.commitPattern) throw new Error('"commitPattern" is required in ~/.gitlarc.json');
   validatePattern(config.branchPattern, 'branchPattern');
@@ -131,11 +143,13 @@ function validateConfig(config: Config): void {
 }
 
 const DEFAULTS: Record<string, any> = {
+  sourceBranch: 'staging',
+  devBranch: 'develop',
   branchPattern: '{type}/{board}-{task}',
   commitPattern: '{type}: [{board}-{task}]',
   alwaysOpenPR: false,
   buildBeforeProceed: true,
-  enableNotifications: false,
+  enableNotifications: true,
 };
 
 function migrateConfig(raw: any): any {
@@ -150,8 +164,18 @@ function migrateConfig(raw: any): any {
 
   if (added.length > 0) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(raw, null, 2) + '\n');
-    console.log(`New config fields added with defaults: ${added.join(', ')}`);
-    console.log(`Run "gitla config" to review your config.\n`);
+    const lines = [
+      '⚙  Config updated — new fields added from this version:',
+      '',
+      ...added.map((key) => `  + ${key}`),
+      '',
+      '  Run "gitla config" to review and edit.',
+    ];
+    const width = Math.max(...lines.map((l) => l.length)) + 4;
+    const hr = '─'.repeat(width);
+    console.log(theme.primary(`\n┌${hr}┐`));
+    lines.forEach((l) => console.log(theme.primary('│') + `  ${l.padEnd(width - 2)}` + theme.primary('│')));
+    console.log(theme.primary(`└${hr}┘\n`));
   }
 
   return raw;
@@ -167,6 +191,8 @@ export async function loadConfig(): Promise<Config> {
 
   const config: Config = {
     board: raw.board || '',
+    sourceBranch: raw.sourceBranch || 'staging',
+    devBranch: raw.devBranch || 'develop',
     branchPattern: raw.branchPattern || '',
     commitPattern: raw.commitPattern || '',
     ai: raw.ai

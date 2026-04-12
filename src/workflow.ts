@@ -95,7 +95,7 @@ export async function runWorkflow(
   config: Config,
   options: WorkflowOptions,
 ): Promise<void> {
-  const PROTECTED_BRANCHES = ['staging', 'develop', 'master', 'main'];
+  const PROTECTED_BRANCHES = [config.sourceBranch, config.devBranch, 'master', 'main'];
 
   // Update mode: already on a task branch, just commit + sync dev branch
   if (options.update) {
@@ -143,8 +143,8 @@ export async function runWorkflow(
     await withSpinner(`Pushing ${currentBranch}`, () => git.push(currentBranch));
 
     const devExists = await git.branchExists(devBranchName);
-    await withSpinner('Switching to develop', () => git.checkout('develop'));
-    await withSpinner('Pulling develop', () => git.pull('develop'));
+    await withSpinner(`Switching to ${config.devBranch}`, () => git.checkout(config.devBranch));
+    await withSpinner(`Pulling ${config.devBranch}`, () => git.pull(config.devBranch));
 
     if (devExists) {
       await withSpinner(`Checking out ${devBranchName}`, () => git.checkout(devBranchName));
@@ -173,32 +173,32 @@ export async function runWorkflow(
     console.log(`  ${theme.primary(currentBranch)} → pushed`);
     console.log(`  ${theme.primary(devBranchName)} → pushed`);
 
-    const openPr = config.alwaysOpenPR || (await confirm('\nOpen PR to develop? [Y/n] '));
-    if (openPr) await createPr(devBranchName, 'develop', commitMessage);
+    const openPr = config.alwaysOpenPR || (await confirm(`\nOpen PR to ${config.devBranch}? [Y/n] `));
+    if (openPr) await createPr(devBranchName, config.devBranch, commitMessage);
     return;
   }
 
-  // Step 1: Verify we're on staging
+  // Step 1: Verify we're on source branch
   const currentBranch = await git.getCurrentBranch();
-  if (currentBranch !== 'staging') {
+  if (currentBranch !== config.sourceBranch) {
     throw new Error(
-      `You must be on the "staging" branch. Currently on: "${currentBranch}"`,
+      `You must be on the "${config.sourceBranch}" branch. Currently on: "${currentBranch}"`,
     );
   }
 
-  // Step 1b: Stash changes, pull latest staging, restore
+  // Step 1b: Stash changes, pull latest source branch, restore
   await withSpinner('Stashing your changes', () => git.stashPush());
   try {
-    await withSpinner('Pulling latest staging', () => git.pull('staging'));
+    await withSpinner(`Pulling latest ${config.sourceBranch}`, () => git.pull(config.sourceBranch));
   } catch (pullErr: any) {
     await git.stashPop().catch(() => null);
-    throw new Error(`Failed to pull staging: ${pullErr.message}`);
+    throw new Error(`Failed to pull ${config.sourceBranch}: ${pullErr.message}`);
   }
   try {
     await withSpinner('Restoring your changes', () => git.stashPop());
   } catch {
     throw new Error(
-      'Stash pop failed — your staging pull likely introduced conflicts with your changes.\n' +
+      `Stash pop failed — your ${config.sourceBranch} pull likely introduced conflicts with your changes.\n` +
       'Run "git stash pop" manually to resolve, then try again.',
     );
   }
@@ -308,12 +308,12 @@ export async function runWorkflow(
   } catch (err: any) {
     console.error(
       `\n${theme.error(
-        `Failed during staging branch workflow: ${err.message}`,
+        `Failed during ${config.sourceBranch} branch workflow: ${err.message}`,
       )}`,
     );
-    console.error('Attempting to return to staging branch...');
+    console.error(`Attempting to return to ${config.sourceBranch} branch...`);
     try {
-      await git.checkout('staging');
+      await git.checkout(config.sourceBranch);
     } catch {
       /* best effort */
     }
@@ -321,8 +321,8 @@ export async function runWorkflow(
   }
 
   try {
-    await withSpinner('Switching to develop', () => git.checkout('develop'));
-    await withSpinner('Pulling develop', () => git.pull('develop'));
+    await withSpinner(`Switching to ${config.devBranch}`, () => git.checkout(config.devBranch));
+    await withSpinner(`Pulling ${config.devBranch}`, () => git.pull(config.devBranch));
     await withSpinner(`Creating branch ${devBranchName}`, () =>
       git.createAndCheckoutBranch(devBranchName),
     );
@@ -341,7 +341,7 @@ export async function runWorkflow(
         console.error(theme.error('\nAborted. Run manually:'));
         console.error(`  git cherry-pick --continue`);
         console.error(`  git push origin ${devBranchName}`);
-        console.error(`  git checkout staging`);
+        console.error(`  git checkout ${config.sourceBranch}`);
         throw cherryErr;
       }
 
@@ -353,17 +353,17 @@ export async function runWorkflow(
     );
   } catch (err: any) {
     if (!err.message?.includes('cherry-pick')) {
-      console.error(`\n${theme.error(`Failed during develop branch workflow: ${err.message}`)}`);
+      console.error(`\n${theme.error(`Failed during ${config.devBranch} branch workflow: ${err.message}`)}`);
     }
     throw err;
   }
 
-  // Return to staging
+  // Return to source branch
   try {
-    await git.checkout('staging');
+    await git.checkout(config.sourceBranch);
   } catch {
     console.warn(
-      '\nWarning: Could not return to staging branch. Run: git checkout staging',
+      `\nWarning: Could not return to ${config.sourceBranch}. Run: git checkout ${config.sourceBranch}`,
     );
   }
 
@@ -374,9 +374,9 @@ export async function runWorkflow(
   console.log(`  ${theme.primary(devBranchName)} → pushed`);
 
   const openPr =
-    config.alwaysOpenPR || (await confirm('\nOpen PR to develop? [Y/n] '));
+    config.alwaysOpenPR || (await confirm(`\nOpen PR to ${config.devBranch}? [Y/n] `));
   if (openPr) {
-    await createPr(devBranchName, 'develop', result.commitMessage);
+    await createPr(devBranchName, config.devBranch, result.commitMessage);
   }
 }
 

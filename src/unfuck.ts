@@ -66,11 +66,11 @@ export async function runUnfuck(
   targets: string[],
   config: Config,
 ): Promise<void> {
-  // Must be on staging
+  // Must be on source branch
   const currentBranch = await git.getCurrentBranch();
-  if (currentBranch !== 'staging') {
+  if (currentBranch !== config.sourceBranch) {
     throw new Error(
-      `You must be on "staging" to unfuck. Currently on: "${currentBranch}"`,
+      `You must be on "${config.sourceBranch}" to unfuck. Currently on: "${currentBranch}"`,
     );
   }
 
@@ -117,7 +117,7 @@ export async function runUnfuck(
 
   const branchName = `undo/${label}`;
   console.log(`\n  ${theme.muted('New branch:')}     ${theme.primary(branchName)}`);
-  console.log(`  ${theme.muted('PR target:')}      staging\n`);
+  console.log(`  ${theme.muted('PR target:')}      ${config.sourceBranch}\n`);
 
   const ok = await confirm('Proceed? [Y/n] ');
   if (!ok) {
@@ -135,7 +135,7 @@ export async function runUnfuck(
     git.revertNoCommit([...commitsToRevert].reverse()),
   );
 
-  const commitMessage = `undo: remove ${label} changes from staging`;
+  const commitMessage = `undo: remove ${label} changes from ${config.sourceBranch}`;
   await withSpinner('Committing', () => git.commit(commitMessage));
   await withSpinner(`Pushing ${branchName}`, () => git.push(branchName));
 
@@ -144,13 +144,12 @@ export async function runUnfuck(
   console.log(`  ${theme.primary(branchName)} → pushed\n`);
 
   // Offer to open PR
-  const openPr = config.alwaysOpenPR || (await confirm('Open PR to staging? [Y/n] '));
+  const openPr = config.alwaysOpenPR || (await confirm(`Open PR to ${config.sourceBranch}? [Y/n] `));
   if (openPr) {
-    await createPr(branchName, 'staging', commitMessage);
+    await createPr(branchName, config.sourceBranch, commitMessage);
   }
 
-  // Return to staging
-  await git.checkout('staging');
+  await git.checkout(config.sourceBranch);
 }
 
 async function createPr(
