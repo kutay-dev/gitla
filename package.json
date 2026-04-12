@@ -1,6 +1,6 @@
 {
   "name": "gitla",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Git workflow automation CLI - branch, commit, push, cherry-pick in one command",
   "main": "dist/index.js",
   "bin": {
