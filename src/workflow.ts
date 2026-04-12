@@ -186,6 +186,23 @@ export async function runWorkflow(
     );
   }
 
+  // Step 1b: Stash changes, pull latest staging, restore
+  await withSpinner('Stashing your changes', () => git.stashPush());
+  try {
+    await withSpinner('Pulling latest staging', () => git.pull('staging'));
+  } catch (pullErr: any) {
+    await git.stashPop().catch(() => null);
+    throw new Error(`Failed to pull staging: ${pullErr.message}`);
+  }
+  try {
+    await withSpinner('Restoring your changes', () => git.stashPop());
+  } catch {
+    throw new Error(
+      'Stash pop failed — your staging pull likely introduced conflicts with your changes.\n' +
+      'Run "git stash pop" manually to resolve, then try again.',
+    );
+  }
+
   // Step 2: Run build if configured
   if (!options.skipBuild) {
     try {

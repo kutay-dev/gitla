@@ -82,6 +82,14 @@ export async function cherryPickContinue(): Promise<void> {
   await run('git', ['cherry-pick', '--continue', '--no-edit']);
 }
 
+export async function stashPush(): Promise<void> {
+  await run('git', ['stash', 'push', '--include-untracked', '-m', 'gitla-auto-stash']);
+}
+
+export async function stashPop(): Promise<void> {
+  await run('git', ['stash', 'pop']);
+}
+
 export async function findCommitsByTicket(ticket: string): Promise<string[]> {
   const result = await execa('git', ['log', '--grep', ticket, '--format=%H', '--reverse']);
   return result.stdout.trim().split('\n').filter(Boolean);
