@@ -18,7 +18,7 @@ program
   .option('-b, --branch <type-taskNumber>', 'Branch type and task number (e.g. feat-123)')
   .option('--unfuck <target...>', 'Undo changes by ticket (e.g. TTBO-123) or commit hash(es)')
   .option('-y, --yes', 'Skip confirmation prompt')
-  .option('--skip-build', 'Skip the build step even if buildBeforeProceed is enabled')
+  .option('--skip-checks', 'Skip lint check, build, and husky hooks for this run')
   .action(async (opts: any) => {
     try {
       if (opts.unfuck) {
@@ -47,7 +47,7 @@ program
         await runWorkflow('', config, {
           message: opts.message,
           yes: opts.yes,
-          skipBuild: opts.skipBuild,
+          skipChecks: opts.skipChecks,
           update: true,
         });
         return;
@@ -87,7 +87,7 @@ program
         message: opts.message,
         type,
         yes: opts.yes,
-        skipBuild: opts.skipBuild,
+        skipChecks: opts.skipChecks,
         ai: !!opts.ai,
       });
     } catch (err: any) {

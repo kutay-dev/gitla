@@ -8,7 +8,7 @@ Automates the team's standard git flow:
 
 1. Stashes your changes
 2. Pulls the latest `source-branch`
-3. Applies the latest stash, if success: pops the stash
+3. Applies the stash (kept as backup until the workflow completes successfully)
 4. Runs lint + build checks
 5. Creates a task branch from `source-branch`, commits and pushes
 6. Checks out `dev-branch`, creates a `-dev` branch, cherry-picks the commit, pushes
@@ -116,7 +116,7 @@ Must be on `source-branch`. The undo branch is named after the original branch (
 | `-m <message>` | Commit message |
 | `--unfuck <target>` | Remove changes by ticket or commit hash(es) from source-branch |
 | `-y, --yes` | Skip confirmation prompt |
-| `--skip-build` | Skip lint and build checks for this run |
+| `--skip-checks` | Skip lint check, build, and husky hooks for this run |
 
 ---
 

@@ -8,7 +8,7 @@ function log(cmd: string) {
 async function run(cmd: string, args: string[]): Promise<string> {
   const full = `${cmd} ${args.join(' ')}`;
   log(full);
-  const result = await execa(cmd, args);
+  const result = await execa(cmd, args, { env: { ...process.env, HUSKY: '0' } });
   return result.stdout.trim();
 }
 
@@ -82,12 +82,17 @@ export async function cherryPickContinue(): Promise<void> {
   await run('git', ['cherry-pick', '--continue', '--no-edit']);
 }
 
-export async function stashPush(): Promise<void> {
-  await run('git', ['stash', 'push', '--include-untracked', '-m', 'gitla-auto-stash']);
+export async function stashPush(): Promise<boolean> {
+  const output = await run('git', ['stash', 'push', '--include-untracked', '-m', 'gitla-auto-stash']);
+  return !output.includes('No local changes to save');
 }
 
-export async function stashPop(): Promise<void> {
-  await run('git', ['stash', 'pop']);
+export async function stashApply(): Promise<void> {
+  await run('git', ['stash', 'apply']);
+}
+
+export async function stashDrop(): Promise<void> {
+  await run('git', ['stash', 'drop']);
 }
 
 export async function findCommitsByTicket(ticket: string): Promise<string[]> {

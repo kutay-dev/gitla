@@ -12,7 +12,7 @@ export interface WorkflowOptions {
   message?: string;
   type?: string;
   yes?: boolean;
-  skipBuild?: boolean;
+  skipChecks?: boolean;
   ai?: boolean;
   update?: boolean;
 }
@@ -46,7 +46,7 @@ async function runLint(): Promise<void> {
 
   console.log(theme.muted('\n> npm run lint\n'));
   const execa = (await import('execa')).default;
-  await execa('npm', ['run', 'lint'], { stdio: 'inherit' });
+  await execa('npm', ['run', 'lint'], { stdio: ['ignore', 'inherit', 'inherit'] });
 }
 
 async function runBuild(): Promise<void> {
@@ -57,7 +57,7 @@ async function runBuild(): Promise<void> {
 
   console.log(theme.muted('\n> npm run build\n'));
   const execa = (await import('execa')).default;
-  await execa('npm', ['run', 'build'], { stdio: 'inherit' });
+  await execa('npm', ['run', 'build'], { stdio: ['ignore', 'inherit', 'inherit'] });
 }
 
 async function withSpinner<T>(
@@ -118,7 +118,7 @@ export async function runWorkflow(
     };
     const commitMessage = applyCommitPattern(options.message!);
 
-    if (!options.skipBuild) {
+    if (!options.skipChecks) {
       try { await runLint(); } catch (err: any) {
         throw new Error(`Lint failed — fix errors before committing.\n${err.message}`);
       }
@@ -187,24 +187,29 @@ export async function runWorkflow(
   }
 
   // Step 1b: Stash changes, pull latest source branch, restore
-  await withSpinner('Stashing your changes', () => git.stashPush());
-  try {
-    await withSpinner(`Pulling latest ${config.sourceBranch}`, () => git.pull(config.sourceBranch));
-  } catch (pullErr: any) {
-    await git.stashPop().catch(() => null);
-    throw new Error(`Failed to pull ${config.sourceBranch}: ${pullErr.message}`);
-  }
-  try {
-    await withSpinner('Restoring your changes', () => git.stashPop());
-  } catch {
-    throw new Error(
-      `Stash pop failed — your ${config.sourceBranch} pull likely introduced conflicts with your changes.\n` +
-      'Run "git stash pop" manually to resolve, then try again.',
-    );
+  // We use stashApply (not stashPop) so the stash entry is preserved as a backup.
+  // stashDrop is called only after the whole workflow succeeds.
+  const stashed = await withSpinner('Stashing your changes', () => git.stashPush());
+  if (stashed) {
+    try {
+      await withSpinner(`Pulling latest ${config.sourceBranch}`, () => git.pull(config.sourceBranch));
+    } catch (pullErr: any) {
+      // Restore changes from stash (stash entry stays as backup)
+      await git.stashApply().catch(() => null);
+      throw new Error(`Failed to pull ${config.sourceBranch}: ${pullErr.message}`);
+    }
+    try {
+      await withSpinner('Restoring your changes', () => git.stashApply());
+    } catch {
+      throw new Error(
+        `Stash apply failed — your ${config.sourceBranch} pull likely introduced conflicts with your changes.\n` +
+        'Run "git stash pop" manually to resolve, then try again.',
+      );
+    }
   }
 
   // Step 2: Run build if configured
-  if (!options.skipBuild) {
+  if (!options.skipChecks) {
     try {
       await runLint();
     } catch (err: any) {
@@ -365,6 +370,11 @@ export async function runWorkflow(
     console.warn(
       `\nWarning: Could not return to ${config.sourceBranch}. Run: git checkout ${config.sourceBranch}`,
     );
+  }
+
+  // Everything succeeded — safe to drop the stash backup now
+  if (stashed) {
+    await git.stashDrop().catch(() => null);
   }
 
   await notify('gitla', `${branchName} done`);
