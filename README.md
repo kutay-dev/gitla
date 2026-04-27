@@ -50,13 +50,27 @@ Config is saved to `~/.gitlarc.json`
 
 ## Usage
 
-### Manual mode — provide branch type and message yourself
+### Interactive mode — just run `gitla`
+
+```bash
+gitla
+```
+
+gitla will ask you for the branch type, task number, and commit message — then show you a preview before proceeding:
+
+<img src="ui.png" width="66%"/>
+
+Must be on `source-branch`.
+
+---
+
+### Manual mode — skip the prompts with flags
 
 ```bash
 gitla -b feat-123 -m "add login page"
 ```
 
-Must be on `source-branch`. `-b` takes `<type>-<taskNumber>`. No confirmation prompt in manual mode.
+`-b` takes `<type>-<taskNumber>`. No confirmation prompt.
 
 ---
 
@@ -65,6 +79,8 @@ Must be on `source-branch`. `-b` takes `<type>-<taskNumber>`. No confirmation pr
 ```bash
 gitla -m "fix edge case in login"
 ```
+
+gitla detects you're on a task branch and skips branch creation. It commits and pushes directly, then syncs the `-dev` branch.
 
 ---
 
