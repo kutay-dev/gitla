@@ -64,7 +64,7 @@ async function callAnthropic(
     model,
     max_tokens: 200,
     messages: [
-      { role: 'user', content: buildPrompt(config.ai!.flags) + truncateDiff(diff) },
+      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
     ],
   });
 
@@ -93,7 +93,7 @@ async function callOpenAI(
     model,
     max_completion_tokens: 200,
     messages: [
-      { role: 'user', content: buildPrompt(config.ai!.flags) + truncateDiff(diff) },
+      { role: 'user', content: buildPrompt(config.flags) + truncateDiff(diff) },
     ],
   });
 
@@ -114,9 +114,12 @@ export async function analyzeChanges(
   config: Config,
 ): Promise<AiResult> {
   if (!config.ai) {
-    throw new Error('AI is not configured. Run "gitla config" and add your AI provider details.');
+    throw new Error(
+      'AI is not configured. Run "gitla config" and add your AI provider details.',
+    );
   }
-  const verb = AI_THINKING_VERBS[Math.floor(Math.random() * AI_THINKING_VERBS.length)];
+  const verb =
+    AI_THINKING_VERBS[Math.floor(Math.random() * AI_THINKING_VERBS.length)];
   const spinner = new Spinner();
   spinner.start(`${verb}...`);
   const start = Date.now();
@@ -125,7 +128,7 @@ export async function analyzeChanges(
       config.ai!.provider === 'anthropic' ? callAnthropic : callOpenAI;
     const { text, tokensUsed } = await callAI(diff, config);
     const elapsedMs = Date.now() - start;
-    const result = parseResponse(text, config.ai!.flags);
+    const result = parseResponse(text, config.flags);
     spinner.stop();
     return { ...result, tokensUsed: { ...tokensUsed, elapsedMs } };
   } catch (err) {

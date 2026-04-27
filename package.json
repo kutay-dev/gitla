@@ -1,6 +1,6 @@
 {
   "name": "gitla",
-  "version": "1.2.1",
+  "version": "1.3.1",
   "description": "Git workflow automation CLI - branch, commit, push, cherry-pick in one command",
   "main": "dist/index.js",
   "bin": {
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@inquirer/prompts": "^8.4.2",
     "commander": "^12.1.0",
     "execa": "^5.1.1",
     "openai": "^4.77.0"

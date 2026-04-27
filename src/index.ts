@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import { CONFIG_PATH, loadConfig, runSetup } from './config';
+import { runInteractive } from './interactive';
 import { notify, setNotificationsEnabled } from './notify';
 import { theme } from './theme';
 import { runUnfuck } from './unfuck';
@@ -30,13 +31,25 @@ program
 
       const isManual = !!(opts.branch && opts.message);
       const isUpdate = !!(opts.message && !opts.branch && !opts.ai);
+      const isInteractive = !opts.ai && !isManual && !isUpdate;
 
-      if (!opts.ai && !isManual && !isUpdate) {
+      if (isInteractive) {
         if (!fs.existsSync(CONFIG_PATH)) {
           await runSetup();
-        } else {
-          program.help();
+          return;
         }
+
+        const config = await loadConfig();
+        setNotificationsEnabled(config.enableNotifications);
+
+        const { type, taskNumber, message } = await runInteractive(config);
+
+        await runWorkflow(taskNumber, config, {
+          message,
+          type,
+          yes: false,
+          skipChecks: opts.skipChecks,
+        });
         return;
       }
 
@@ -70,8 +83,8 @@ program
           process.exit(1);
         }
 
-        if (config.ai && !config.ai.flags.includes(type)) {
-          console.error(theme.error(`Error: branch type "${type}" must be one of: ${config.ai.flags.join(', ')}`));
+        if (!config.flags.includes(type)) {
+          console.error(theme.error(`Error: branch type "${type}" must be one of: ${config.flags.join(', ')}`));
           process.exit(1);
         }
       } else {

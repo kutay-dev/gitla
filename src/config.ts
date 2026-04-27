@@ -17,6 +17,7 @@ export interface Config {
   devBranch: string;     // branch changes get cherry-picked to (e.g. develop)
   branchPattern: string;
   commitPattern: string;
+  flags: string[];       // branch type flags (e.g. feat, fix, refactor, chore)
   ai?: AiConfig;
   alwaysOpenPR: boolean;
   buildBeforeProceed: boolean;
@@ -82,21 +83,24 @@ export async function runSetup(): Promise<Config> {
     }
   }
 
+  const flagsInput = await ask(
+    rl,
+    'Branch type flags, comma separated (e.g. feat,fix,refactor,chore): ',
+  );
+  const flags = flagsInput
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
+  if (!flags.length) {
+    console.log('  No flags entered, using defaults: feat, fix, refactor, chore');
+    flags.push('feat', 'fix', 'refactor', 'chore');
+  }
+
   let ai: AiConfig | undefined;
   const providerInput = await ask(rl, 'AI provider (anthropic/openai) — press enter to skip AI: ');
 
   if (providerInput === 'anthropic' || providerInput === 'openai') {
     const apiKey = await ask(rl, 'API key: ');
-
-    const flagsInput = await ask(
-      rl,
-      'Branch type flags, comma separated (e.g. feature,bugfix,chore): ',
-    );
-    const flags = flagsInput
-      .split(',')
-      .map((f) => f.trim())
-      .filter(Boolean);
-
     ai = { provider: providerInput, apiKey, flags };
   } else if (providerInput !== '') {
     console.log('  Skipping AI setup (invalid provider entered).');
@@ -113,7 +117,7 @@ export async function runSetup(): Promise<Config> {
 
   rl.close();
 
-  const config: Config = { board, sourceBranch, devBranch, branchPattern, commitPattern, ai, alwaysOpenPR, buildBeforeProceed, enableNotifications };
+  const config: Config = { board, sourceBranch, devBranch, branchPattern, commitPattern, flags, ai, alwaysOpenPR, buildBeforeProceed, enableNotifications };
 
   validateConfig(config);
 
@@ -131,13 +135,13 @@ function validateConfig(config: Config): void {
   if (!config.commitPattern) throw new Error('"commitPattern" is required in ~/.gitlarc.json');
   validatePattern(config.branchPattern, 'branchPattern');
   validatePattern(config.commitPattern, 'commitPattern');
+  if (!config.flags?.length) {
+    throw new Error('"flags" must be a non-empty array in ~/.gitlarc.json');
+  }
   if (config.ai) {
     if (!config.ai.apiKey) throw new Error('"ai.apiKey" is required in ~/.gitlarc.json');
     if (!['anthropic', 'openai'].includes(config.ai.provider)) {
       throw new Error('"ai.provider" must be "anthropic" or "openai"');
-    }
-    if (!config.ai.flags?.length) {
-      throw new Error('"ai.flags" must be a non-empty array in ~/.gitlarc.json');
     }
   }
 }
@@ -147,6 +151,7 @@ const DEFAULTS: Record<string, any> = {
   devBranch: 'develop',
   branchPattern: '{type}/{board}-{task}',
   commitPattern: '{type}: [{board}-{task}]',
+  flags: ['feat', 'fix', 'refactor', 'chore'],
   alwaysOpenPR: false,
   buildBeforeProceed: true,
   enableNotifications: true,
@@ -154,6 +159,12 @@ const DEFAULTS: Record<string, any> = {
 
 function migrateConfig(raw: any): any {
   const added: string[] = [];
+
+  // Migrate ai.flags → top-level flags
+  if (raw.flags === undefined && raw.ai?.flags?.length) {
+    raw.flags = raw.ai.flags;
+    added.push('flags (copied from ai.flags)');
+  }
 
   for (const [key, value] of Object.entries(DEFAULTS)) {
     if (raw[key] === undefined) {
@@ -195,12 +206,13 @@ export async function loadConfig(): Promise<Config> {
     devBranch: raw.devBranch || 'develop',
     branchPattern: raw.branchPattern || '',
     commitPattern: raw.commitPattern || '',
+    flags: raw.flags || ['feat', 'fix', 'refactor', 'chore'],
     ai: raw.ai
       ? {
           provider: raw.ai.provider || 'anthropic',
           apiKey: raw.ai.apiKey || '',
           model: raw.ai.model,
-          flags: raw.ai.flags || ['feature', 'bugfix'],
+          flags: raw.ai.flags || raw.flags || ['feat', 'fix', 'refactor', 'chore'],
         }
       : undefined,
     alwaysOpenPR: raw.alwaysOpenPR ?? false,
